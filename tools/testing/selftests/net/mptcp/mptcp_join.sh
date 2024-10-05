@@ -179,7 +179,10 @@ if iptables-legacy -V &> /dev/null; then
 elif ! iptables -V &> /dev/null; then
 	echo "SKIP: Could not run all tests without iptables tool"
 	exit $ksft_skip
-elif ! ip6tables -V &> /dev/null; then
+fi
+
+ip6tables -V > /dev/null 2>&1
+if [ $? -ne 0 ];then
 	echo "SKIP: Could not run all tests without ip6tables tool"
 	exit $ksft_skip
 fi

@@ -226,17 +226,6 @@ int msm_pcie_reg_dump(struct pci_dev *pci_dev, u8 *buff, u32 len);
  */
 int msm_pcie_dsp_link_control(struct pci_dev *pci_dev,
 				    bool link_enable);
-
-/*
- * Retrains the link between the port and endpoint to
- * the specified speed.
- * @ep_dev: pci_dev structure of the endpoint
- * target_link_speed: target link speed for retraining
- *
- * Return: 0 on success, negative value on error
- */
-int msm_pcie_retrain_port_link(struct pci_dev *ep_dev,
-				u16 target_link_speed);
 #else /* !CONFIG_PCI_MSM */
 static inline int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr,
 			void *user, void *data, u32 options)
@@ -302,4 +291,32 @@ static inline int msm_pcie_dsp_link_control(struct pci_dev *pci_dev,
 }
 #endif /* CONFIG_PCI_MSM */
 
+#ifdef CONFIG_SEC_PCIE_L1SS
+enum l1ss_ctrl_ids {
+	L1SS_SYSFS,
+	L1SS_MST,
+	L1SS_AUDIO,
+	L1SS_MAX
+};
+
+extern void sec_pcie_set_use_ep_loaded(struct pci_dev *dev);
+extern void sec_pcie_set_ep_driver_loaded(struct pci_dev *dev, bool is_loaded);
+
+extern int sec_pcie_l1ss_enable(int ctrl_id);
+extern int sec_pcie_l1ss_disable(int ctrl_id);
+#else
+
+static inline void sec_pcie_set_use_ep_loaded(dev) {}
+static inline void sec_pcie_set_ep_driver_loaded(dev, is_loaded) {}
+
+static inline int sec_pcie_l1ss_enable(int ctrl_id)
+{
+	return -ENODEV;
+}
+
+static inline int sec_pcie_l1ss_disable(int ctrl_id)
+{
+	return -ENODEV;
+}
+#endif
 #endif /* __MSM_PCIE_H */

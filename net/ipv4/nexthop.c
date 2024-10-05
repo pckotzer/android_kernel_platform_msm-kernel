@@ -3222,9 +3222,13 @@ static int rtm_dump_nexthop(struct sk_buff *skb, struct netlink_callback *cb)
 				     &rtm_dump_nexthop_cb, &filter);
 	if (err < 0) {
 		if (likely(skb->len))
-			err = skb->len;
+			goto out;
+		goto out_err;
 	}
 
+out:
+	err = skb->len;
+out_err:
 	cb->seq = net->nexthop.seq;
 	nl_dump_check_consistent(cb, nlmsg_hdr(skb));
 	return err;
@@ -3364,19 +3368,25 @@ static int rtm_dump_nexthop_bucket_nh(struct sk_buff *skb,
 		    dd->filter.res_bucket_nh_id != nhge->nh->id)
 			continue;
 
-		dd->ctx->bucket_index = bucket_index;
 		err = nh_fill_res_bucket(skb, nh, bucket, bucket_index,
 					 RTM_NEWNEXTHOPBUCKET, portid,
 					 cb->nlh->nlmsg_seq, NLM_F_MULTI,
 					 cb->extack);
-		if (err)
-			return err;
+		if (err < 0) {
+			if (likely(skb->len))
+				goto out;
+			goto out_err;
+		}
 	}
 
 	dd->ctx->done_nh_idx = dd->ctx->nh.idx + 1;
-	dd->ctx->bucket_index = 0;
+	bucket_index = 0;
 
-	return 0;
+out:
+	err = skb->len;
+out_err:
+	dd->ctx->bucket_index = bucket_index;
+	return err;
 }
 
 static int rtm_dump_nexthop_bucket_cb(struct sk_buff *skb,
@@ -3425,9 +3435,13 @@ static int rtm_dump_nexthop_bucket(struct sk_buff *skb,
 
 	if (err < 0) {
 		if (likely(skb->len))
-			err = skb->len;
+			goto out;
+		goto out_err;
 	}
 
+out:
+	err = skb->len;
+out_err:
 	cb->seq = net->nexthop.seq;
 	nl_dump_check_consistent(cb, nlmsg_hdr(skb));
 	return err;

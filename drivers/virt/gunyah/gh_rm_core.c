@@ -78,8 +78,6 @@ const static struct {
 	{GH_CPUSYS_VM, "cpusys_vm", "qcom,cpusysvm"},
 	{GH_OEM_VM, "oem_vm", "qcom,oemvm"},
 	{GH_AUTO_VM, "autoghgvm", "qcom,autoghgvm"},
-	{GH_ROBOTICS_VM1, "roboticsvm1", "qcom,roboticsvm1"},
-	{GH_ROBOTICS_VM2, "roboticsvm2", "qcom,roboticsvm2"},
 };
 
 static struct task_struct *gh_rm_drv_recv_task;
@@ -911,7 +909,7 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 				goto out;
 
 			cap_id = (u64) res_entries[i].cap_id_high << 32 |
-					res_entries[i].cap_id_low;
+				res_entries[i].cap_id_low;
 			label = res_entries[i].resource_label;
 			if (gh_vcpu_affinity_set_fn)
 				do {
@@ -963,9 +961,8 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 					GH_MSGQ_DIRECTION_RX, linux_irq);
 				break;
 			case GH_RM_RES_TYPE_VCPU:
-			/* Already populate VCPU resource */
+				/* Already populate VCPU resource */
 				break;
-
 			case GH_RM_RES_TYPE_DB_TX:
 				ret = gh_dbl_populate_cap_info(label, cap_id,
 					GH_MSGQ_DIRECTION_TX, linux_irq);

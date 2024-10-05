@@ -194,9 +194,7 @@ static const struct chan_attr mhi_chan_attr_table[] = {
 		NULL,
 		NULL,
 		false,
-		true,
-		false,
-		50
+		true
 	},
 	{
 		MHI_CLIENT_QMI_OUT,

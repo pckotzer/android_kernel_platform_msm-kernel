@@ -164,6 +164,7 @@ static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
 static struct list_head offload_base __read_mostly;
+static u64 debug_frags_read;
 
 static int netif_rx_internal(struct sk_buff *skb);
 static int call_netdevice_notifiers_info(unsigned long val,
@@ -303,12 +304,6 @@ static struct netdev_name_node *netdev_name_node_lookup_rcu(struct net *net,
 			return name_node;
 	return NULL;
 }
-
-bool netdev_name_in_use(struct net *net, const char *name)
-{
-	return netdev_name_node_lookup(net, name);
-}
-EXPORT_SYMBOL(netdev_name_in_use);
 
 int netdev_name_node_alt_create(struct net_device *dev, const char *name)
 {
@@ -1148,7 +1143,7 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 	}
 
 	snprintf(buf, IFNAMSIZ, name, i);
-	if (!netdev_name_in_use(net, buf))
+	if (!__dev_get_by_name(net, buf))
 		return i;
 
 	/* It is possible to run out of possible slots
@@ -1156,26 +1151,6 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 	 * for the digits, or if all bits are used.
 	 */
 	return -ENFILE;
-}
-
-static int dev_prep_valid_name(struct net *net, struct net_device *dev,
-			       const char *want_name, char *out_name)
-{
-	int ret;
-
-	if (!dev_valid_name(want_name))
-		return -EINVAL;
-
-	if (strchr(want_name, '%')) {
-		ret = __dev_alloc_name(net, want_name, out_name);
-		return ret < 0 ? ret : 0;
-	} else if (netdev_name_in_use(net, want_name)) {
-		return -EEXIST;
-	} else if (out_name != want_name) {
-		strscpy(out_name, want_name, IFNAMSIZ);
-	}
-
-	return 0;
 }
 
 static int dev_alloc_name_ns(struct net *net,
@@ -1188,7 +1163,7 @@ static int dev_alloc_name_ns(struct net *net,
 	BUG_ON(!net);
 	ret = __dev_alloc_name(net, name, buf);
 	if (ret >= 0)
-		strscpy(dev->name, buf, IFNAMSIZ);
+		strlcpy(dev->name, buf, IFNAMSIZ);
 	return ret;
 }
 
@@ -1215,13 +1190,19 @@ EXPORT_SYMBOL(dev_alloc_name);
 static int dev_get_valid_name(struct net *net, struct net_device *dev,
 			      const char *name)
 {
-	char buf[IFNAMSIZ];
-	int ret;
+	BUG_ON(!net);
 
-	ret = dev_prep_valid_name(net, dev, name, buf);
-	if (ret >= 0)
-		strscpy(dev->name, buf, IFNAMSIZ);
-	return ret;
+	if (!dev_valid_name(name))
+		return -EINVAL;
+
+	if (strchr(name, '%'))
+		return dev_alloc_name_ns(net, dev, name);
+	else if (__dev_get_by_name(net, name))
+		return -EEXIST;
+	else if (dev->name != name)
+		strlcpy(dev->name, name, IFNAMSIZ);
+
+	return 0;
 }
 
 /**
@@ -3547,9 +3528,6 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 	if (gso_segs > dev->gso_max_segs)
 		return features & ~NETIF_F_GSO_MASK;
 
-	if (unlikely(skb->len >= READ_ONCE(dev->gso_max_size)))
-		return features & ~NETIF_F_GSO_MASK;
-
 	if (!skb_shinfo(skb)->gso_type) {
 		skb_warn_bad_offload(skb);
 		return features & ~NETIF_F_GSO_MASK;
@@ -4980,6 +4958,21 @@ int netif_rx(struct sk_buff *skb)
 {
 	int ret;
 
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	trace_netif_rx_entry(skb);
 
 	ret = netif_rx_internal(skb);
@@ -4992,6 +4985,21 @@ EXPORT_SYMBOL(netif_rx);
 int netif_rx_ni(struct sk_buff *skb)
 {
 	int err;
+
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
 
 	trace_netif_rx_ni_entry(skb);
 
@@ -5352,6 +5360,23 @@ skip_taps:
 
 		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev,
 					 &another);
+		if (skb) {
+			struct sk_buff *frag_iter;
+
+			if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+				skb_walk_frags(skb, frag_iter) {
+					debug_frags_read++;
+					if (!skb_headlen(frag_iter) &&
+					(!skb_shinfo(frag_iter)->nr_frags ||
+					skb_shinfo(frag_iter)->frag_list)) {
+						pr_err("%s(): head_skb: 0x%llx\n",
+						__func__, (u64)skb);
+						BUG_ON(1);
+					}
+				}
+			}
+		}
+
 		if (another)
 			goto another_round;
 		if (!skb)
@@ -5359,6 +5384,24 @@ skip_taps:
 
 		if (nf_ingress(skb, &pt_prev, &ret, orig_dev) < 0)
 			goto out;
+
+		{
+			struct sk_buff *frag_iter;
+
+			if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+				skb_walk_frags(skb, frag_iter) {
+					debug_frags_read++;
+					if (!skb_headlen(frag_iter) &&
+					(!skb_shinfo(frag_iter)->nr_frags ||
+					skb_shinfo(frag_iter)->frag_list)) {
+						pr_err("%s(): head_skb: 0x%llx\n",
+						__func__, (u64)skb);
+						BUG_ON(1);
+					}
+				}
+			}
+		}
+
 	}
 #endif
 	skb_reset_redirect(skb);
@@ -5513,6 +5556,23 @@ int netif_receive_skb_core(struct sk_buff *skb)
 {
 	int ret;
 
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+
 	rcu_read_lock();
 	ret = __netif_receive_skb_one_core(skb, false);
 	rcu_read_unlock();
@@ -5586,6 +5646,23 @@ static void __netif_receive_skb_list_core(struct list_head *head, bool pfmemallo
 static int __netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
 
 	if (sk_memalloc_socks() && skb_pfmemalloc(skb)) {
 		unsigned int noreclaim_flag;
@@ -5745,6 +5822,23 @@ static void netif_receive_skb_list_internal(struct list_head *head)
 int netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
 
 	trace_netif_receive_skb_entry(skb);
 
@@ -6251,6 +6345,21 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	gro_result_t ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
 
 	skb_mark_napi_id(skb, napi);
 	trace_napi_gro_receive_entry(skb);
@@ -11186,7 +11295,6 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 			       const char *pat, int new_ifindex)
 {
 	struct net *net_old = dev_net(dev);
-	char new_name[IFNAMSIZ] = {};
 	int err, new_nsid;
 
 	ASSERT_RTNL();
@@ -11209,11 +11317,11 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 	 * we can use it in the destination network namespace.
 	 */
 	err = -EEXIST;
-	if (netdev_name_in_use(net, dev->name)) {
+	if (__dev_get_by_name(net, dev->name)) {
 		/* We get here if we can't use the current device name */
 		if (!pat)
 			goto out;
-		err = dev_prep_valid_name(net, dev, pat, new_name);
+		err = dev_get_valid_name(net, dev, pat);
 		if (err < 0)
 			goto out;
 	}
@@ -11280,9 +11388,6 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 	/* Send a netdev-add uevent to the new namespace */
 	kobject_uevent(&dev->dev.kobj, KOBJ_ADD);
 	netdev_adjacent_add_links(dev);
-
-	if (new_name[0]) /* Rename the netdev to prepared name */
-		strscpy(dev->name, new_name, IFNAMSIZ);
 
 	/* Fixup kobjects */
 	err = device_rename(&dev->dev, dev->name);
@@ -11564,7 +11669,7 @@ static void __net_exit default_device_exit(struct net *net)
 
 		/* Push remaining network devices to init_net */
 		snprintf(fb_name, IFNAMSIZ, "dev%d", dev->ifindex);
-		if (netdev_name_in_use(&init_net, fb_name))
+		if (__dev_get_by_name(&init_net, fb_name))
 			snprintf(fb_name, IFNAMSIZ, "dev%%d");
 		err = dev_change_net_namespace(dev, &init_net, fb_name);
 		if (err) {

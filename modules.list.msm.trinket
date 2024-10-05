@@ -73,5 +73,3 @@ ufshcd-crypto-qti.ko
 cqhci-crypto-qti.ko
 crypto-qti-common.ko
 crypto-qti-tz.ko
-nvmem_qfprom.ko
-sdhci-msm-scaling.ko

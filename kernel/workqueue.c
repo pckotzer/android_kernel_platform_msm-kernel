@@ -1959,17 +1959,12 @@ static struct worker *create_worker(struct worker_pool *pool)
 
 	/* ID is needed to determine kthread name */
 	id = ida_alloc(&pool->worker_ida, GFP_KERNEL);
-	if (id < 0) {
-		pr_err_once("workqueue: Failed to allocate a worker ID: %pe\n",
-			    ERR_PTR(id));
+	if (id < 0)
 		return NULL;
-	}
 
 	worker = alloc_worker(pool->node);
-	if (!worker) {
-		pr_err_once("workqueue: Failed to allocate a worker\n");
+	if (!worker)
 		goto fail;
-	}
 
 	worker->id = id;
 
@@ -1981,11 +1976,8 @@ static struct worker *create_worker(struct worker_pool *pool)
 
 	worker->task = kthread_create_on_node(worker_thread, worker, pool->node,
 					      "kworker/%s", id_buf);
-	if (IS_ERR(worker->task)) {
-		pr_err_once("workqueue: Failed to create a worker thread: %pe",
-			    worker->task);
+	if (IS_ERR(worker->task))
 		goto fail;
-	}
 
 	set_user_nice(worker->task, pool->attrs->nice);
 	kthread_bind_mask(worker->task, pool->attrs->cpumask);
@@ -3291,15 +3283,6 @@ static bool __cancel_work(struct work_struct *work, bool is_dwork)
 	local_irq_restore(flags);
 	return ret;
 }
-
-/*
- * See cancel_delayed_work()
- */
-bool cancel_work(struct work_struct *work)
-{
-	return __cancel_work(work, false);
-}
-EXPORT_SYMBOL(cancel_work);
 
 /**
  * cancel_delayed_work - cancel a delayed work
@@ -5404,13 +5387,9 @@ static int workqueue_apply_unbound_cpumask(void)
 	list_for_each_entry(wq, &workqueues, list) {
 		if (!(wq->flags & WQ_UNBOUND))
 			continue;
-
 		/* creating multiple pwqs breaks ordering guarantee */
-		if (!list_empty(&wq->pwqs)) {
-			if (wq->flags & __WQ_ORDERED_EXPLICIT)
-				continue;
-			wq->flags &= ~__WQ_ORDERED;
-		}
+		if (wq->flags & __WQ_ORDERED)
+			continue;
 
 		ctx = apply_wqattrs_prepare(wq, wq->unbound_attrs);
 		if (!ctx) {

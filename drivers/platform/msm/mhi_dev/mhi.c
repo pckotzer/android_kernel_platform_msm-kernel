@@ -39,8 +39,6 @@
 /* Wait time before suspend/resume is complete */
 #define MHI_SUSPEND_MIN			100
 #define MHI_SUSPEND_TIMEOUT		600
-/* Wait time for completion */
-#define DMA_READ_TOUT_MS		3000
 /* Wait time on the device for Host to set BHI_INTVEC */
 #define MHI_BHI_INTVEC_MAX_CNT			200
 #define MHI_BHI_INTVEC_WAIT_MS		50
@@ -74,8 +72,8 @@
 #define MHI_DEV_CH_CLOSE_TIMEOUT_MAX	5100
 #define MHI_DEV_CH_CLOSE_TIMEOUT_COUNT	200
 
-#define IGNORE_CH_SIZE			4
-int ignore_ch_channel[IGNORE_CH_SIZE] = {2, 3, 24, 25};
+#define IGNORE_CH_SIZE			2
+int ignore_ch_channel[IGNORE_CH_SIZE] = {2, 3};
 
 uint32_t bhi_imgtxdb;
 enum mhi_msg_level mhi_msg_lvl = MHI_MSG_ERROR;
@@ -272,18 +270,11 @@ void mhi_dev_read_from_host_mhi_dma(struct mhi_dev *mhi, struct mhi_addr *transf
 			mhi->mhi_dma_fun_params,
 			mhi_dev_ring_cache_completion_cb,
 			&ring_req);
-	if (rc) {
+	if (rc)
 		mhi_log(mhi->vf_id, MHI_MSG_ERROR, "error while reading from host:%d\n",
 				rc);
-		WARN_ON(1);
-		return;
-	}
 
-	if (!wait_for_completion_timeout(&done, msecs_to_jiffies(DMA_READ_TOUT_MS))) {
-		mhi_log(mhi->vf_id, MHI_MSG_ERROR,
-		"Timeout - DMA is either stuck or taking longer to perform transfer.\n");
-		BUG_ON(1);
-	}
+	wait_for_completion(&done);
 }
 
 /**
@@ -1743,22 +1734,24 @@ static void mhi_hwc_cb(void *priv, enum mhi_dma_event_type event,
 	u32 mhi_reset;
 	struct mhi_dev *mhi_ctx = (struct mhi_dev *)priv;
 
-	mutex_lock(&mhi_ctx->mhi_lock);
 	switch (event) {
 	case MHI_DMA_EVENT_READY:
+		mutex_lock(&mhi_ctx->mhi_lock);
 		mhi_log(mhi_ctx->vf_id, MHI_MSG_INFO,
 			"HW ch uC is ready event=0x%X\n", event);
 		rc = mhi_hwc_start(mhi_ctx);
 		if (rc) {
 			mhi_log(mhi_ctx->vf_id, MHI_MSG_ERROR,
 				"hwc_init start failed with %d\n", rc);
-			goto err;
+			mutex_unlock(&mhi_ctx->mhi_lock);
+			return;
 		}
 
 		rc = mhi_dev_mmio_get_mhi_state(mhi_ctx, &state, &mhi_reset);
 		if (rc) {
 			mhi_log(mhi_ctx->vf_id, MHI_MSG_ERROR, "get mhi state failed\n");
-			goto err;
+			mutex_unlock(&mhi_ctx->mhi_lock);
+			return;
 		}
 
 		if (state == MHI_DEV_M0_STATE && !mhi_reset) {
@@ -1771,11 +1764,12 @@ static void mhi_hwc_cb(void *priv, enum mhi_dma_event_type event,
 			enable_irq(mhi_ctx->mhi_irq);
 		}
 
+		mutex_unlock(&mhi_ctx->mhi_lock);
 		rc = mhi_enable_int(mhi_ctx);
 		if (rc) {
 			mhi_log(mhi_ctx->vf_id, MHI_MSG_ERROR,
 				"Error configuring interrupts, rc = %d\n", rc);
-			goto err;
+			return;
 		}
 
 		mhi_log(mhi_ctx->vf_id, MHI_MSG_INFO, "Device in M0 State\n");
@@ -1785,7 +1779,7 @@ static void mhi_hwc_cb(void *priv, enum mhi_dma_event_type event,
 		if (rc) {
 			mhi_log(mhi_ctx->vf_id, MHI_MSG_ERROR,
 				"Event HW_ACC_WAKEUP failed with %d\n", rc);
-			goto err;
+			return;
 		}
 		break;
 	default:
@@ -1793,10 +1787,6 @@ static void mhi_hwc_cb(void *priv, enum mhi_dma_event_type event,
 			"HW ch uC unknown event 0x%X\n", event);
 		break;
 	}
-err:
-	mutex_unlock(&mhi_ctx->mhi_lock);
-	return;
-
 }
 
 static int mhi_hwc_chcmd(struct mhi_dev *mhi, uint chid,
@@ -2853,19 +2843,18 @@ static void mhi_dev_transfer_completion_cb(void *mreq)
 	/* Trigger client call back */
 	req->client_cb(req);
 
+	mutex_lock(&ch->ch_lock);
 	/* Flush read completions to host */
 	if (snd_cmpl && mhi_ctx->ch_ctx_cache[ch->ch_id].ch_type ==
 				MHI_DEV_CH_TYPE_OUTBOUND_CHANNEL) {
 		mhi_log(mhi_ctx->vf_id, MHI_MSG_DBG, "Calling flush for ch_id:%d\n", ch->ch_id);
-		mutex_lock(&ch->ch_lock);
 		rc = mhi_dev_flush_transfer_completion_events(mhi_ctx, ch, snd_cmpl);
-		mutex_unlock(&ch->ch_lock);
 		if (rc) {
 			mhi_log(mhi_ctx->vf_id, MHI_MSG_ERROR,
 				"Failed to flush read completions to host\n");
 		}
 	}
-
+	mutex_unlock(&ch->ch_lock);
 	if (ch->state == MHI_DEV_CH_PENDING_STOP) {
 		ch->state = MHI_DEV_CH_STOPPED;
 		rc = mhi_dev_process_stop_cmd(ch->ring, ch->ch_id, mhi_ctx);

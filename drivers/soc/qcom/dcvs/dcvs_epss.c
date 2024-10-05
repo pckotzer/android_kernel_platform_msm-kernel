@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "qcom-dcvs-epss: " fmt
@@ -28,6 +27,7 @@ struct epss_dev_data {
 	u32		*l3_percpu_offsets;
 };
 
+struct epss_dev_data *epss_data;
 static DEFINE_MUTEX(epss_lock);
 
 #define L3_VOTING_OFFSET	0x90
@@ -121,7 +121,7 @@ static int commit_epss_l3(struct dcvs_path *path, struct dcvs_freq *freqs,
 		if (freqs->ib <= hw->freq_table[idx])
 			break;
 
-	if (hw->type == DCVS_L3 || hw->type == DCVS_L3_1) {
+	if (hw->type == DCVS_L3) {
 		if (shared)
 			offset = d->l3_shared_offset;
 		else {
@@ -150,37 +150,36 @@ static int commit_epss_l3_percpu(struct dcvs_path *path,
 	return commit_epss_l3(path, freqs, update_mask, false);
 }
 
-static struct epss_dev_data *init_epss_data(struct device *dev)
+static int init_epss_data(struct device *dev)
 {
 	int idx, ret = 0;
 	struct resource res;
-	struct epss_dev_data *epss_data;
 
 	epss_data = devm_kzalloc(dev, sizeof(*epss_data), GFP_KERNEL);
 	if (!epss_data)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 
 	idx = of_property_match_string(dev->parent->of_node, "reg-names",
 								"l3-base");
 	if (idx < 0) {
 		dev_err(dev, "%s: Unable to find l3-base: %d\n", __func__, idx);
-		return ERR_PTR(-EINVAL);
+		return -EINVAL;
 	}
 
 	ret = of_address_to_resource(dev->parent->of_node, idx, &res);
 	if (ret < 0) {
 		dev_err(dev, "Unable to get resource from address: %d\n", ret);
-		return ERR_PTR(ret);
+		return ret;
 	}
 
 	epss_data->l3_base = devm_ioremap(dev->parent, res.start,
 							resource_size(&res));
 	if (!epss_data->l3_base) {
 		dev_err(dev, "Unable to map l3-base!\n");
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	}
 
-	return epss_data;
+	return ret;
 
 }
 
@@ -235,17 +234,14 @@ int setup_epss_l3_device(struct device *dev, struct dcvs_hw *hw,
 					struct dcvs_path *path, bool shared)
 {
 	int ret = 0;
-	struct epss_dev_data *epss_data;
-
-	epss_data = (struct epss_dev_data *)path->data;
 
 	mutex_lock(&epss_lock);
 	if (!epss_data)
-		epss_data = init_epss_data(dev);
+		ret = init_epss_data(dev);
 	mutex_unlock(&epss_lock);
 
-	if (IS_ERR(epss_data))
-		return PTR_ERR(epss_data);
+	if (ret < 0)
+		return ret;
 
 	if (shared) {
 		ret = populate_shared_offset(dev, &epss_data->l3_shared_offset);

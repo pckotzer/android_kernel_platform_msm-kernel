@@ -820,9 +820,6 @@ int pci_wait_for_pending(struct pci_dev *dev, int pos, u16 mask)
 			return 1;
 	}
 
-	if (dev->bus->self)
-		pcie_aspm_pm_state_change(dev->bus->self);
-
 	return 0;
 }
 
@@ -1142,9 +1139,6 @@ static int pci_raw_set_power_state(struct pci_dev *dev, pci_power_t state)
 	 */
 	if (need_restore)
 		pci_restore_bars(dev);
-
-	if (dev->bus->self)
-		pcie_aspm_pm_state_change(dev->bus->self);
 
 	return 0;
 }
@@ -3655,14 +3649,14 @@ u32 pci_rebar_get_possible_sizes(struct pci_dev *pdev, int bar)
 		return 0;
 
 	pci_read_config_dword(pdev, pos + PCI_REBAR_CAP, &cap);
-	cap = FIELD_GET(PCI_REBAR_CAP_SIZES, cap);
+	cap &= PCI_REBAR_CAP_SIZES;
 
 	/* Sapphire RX 5600 XT Pulse has an invalid cap dword for BAR 0 */
 	if (pdev->vendor == PCI_VENDOR_ID_ATI && pdev->device == 0x731f &&
-	    bar == 0 && cap == 0x700)
-		return 0x3f00;
+	    bar == 0 && cap == 0x7000)
+		cap = 0x3f000;
 
-	return cap;
+	return cap >> 4;
 }
 EXPORT_SYMBOL(pci_rebar_get_possible_sizes);
 
@@ -6067,7 +6061,8 @@ u32 pcie_bandwidth_available(struct pci_dev *dev, struct pci_dev **limiting_dev,
 		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
 
 		next_speed = pcie_link_speed[lnksta & PCI_EXP_LNKSTA_CLS];
-		next_width = FIELD_GET(PCI_EXP_LNKSTA_NLW, lnksta);
+		next_width = (lnksta & PCI_EXP_LNKSTA_NLW) >>
+			PCI_EXP_LNKSTA_NLW_SHIFT;
 
 		next_bw = next_width * PCIE_SPEED2MBS_ENC(next_speed);
 
@@ -6139,7 +6134,7 @@ enum pcie_link_width pcie_get_width_cap(struct pci_dev *dev)
 
 	pcie_capability_read_dword(dev, PCI_EXP_LNKCAP, &lnkcap);
 	if (lnkcap)
-		return FIELD_GET(PCI_EXP_LNKCAP_MLW, lnkcap);
+		return (lnkcap & PCI_EXP_LNKCAP_MLW) >> 4;
 
 	return PCIE_LNK_WIDTH_UNKNOWN;
 }

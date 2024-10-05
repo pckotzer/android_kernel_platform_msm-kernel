@@ -113,6 +113,17 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+
+#ifdef CONFIG_KDP_CRED
+#include <linux/kdp.h>
+#endif
+
+#ifdef CONFIG_PROC_FSLOG
+#include <linux/fslog.h>
+#else
+#define RECLAIMER_LOG(fmt, ...)
+#endif
+
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -810,14 +821,6 @@ void __put_task_struct(struct task_struct *tsk)
 }
 EXPORT_SYMBOL_GPL(__put_task_struct);
 
-void __put_task_struct_rcu_cb(struct rcu_head *rhp)
-{
-	struct task_struct *task = container_of(rhp, struct task_struct, rcu);
-
-	__put_task_struct(task);
-}
-EXPORT_SYMBOL_GPL(__put_task_struct_rcu_cb);
-
 void __init __weak arch_task_cache_init(void) { }
 
 /*
@@ -1027,6 +1030,10 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_MEMCG
 	tsk->active_memcg = NULL;
 #endif
+#ifdef CONFIG_TASK_HAS_ALLOC_FREE_STAT
+	tsk->alloc_sum = 0;
+	tsk->free_sum = 0;
+#endif
 #ifdef CONFIG_ANDROID_VENDOR_OEM_DATA
 	memset(&tsk->android_vendor_data1, 0, sizeof(tsk->android_vendor_data1));
 	memset(&tsk->android_oem_data1, 0, sizeof(tsk->android_oem_data1));
@@ -1199,7 +1206,9 @@ void mmput(struct mm_struct *mm)
 
 	if (atomic_dec_and_test(&mm->mm_users)) {
 		trace_android_vh_mmput(mm);
+		RECLAIMER_LOG("UMR: B|last_exit");
 		__mmput(mm);
+		RECLAIMER_LOG("UMR: E|last_exit");
 	}
 }
 EXPORT_SYMBOL_GPL(mmput);
@@ -2497,6 +2506,10 @@ static __latent_entropy struct task_struct *copy_process(
 
 	copy_oom_score_adj(clone_flags, p);
 
+#ifdef CONFIG_KDP_CRED
+	if (kdp_enable)
+		kdp_assign_pgd(p);
+#endif
 	return p;
 
 bad_fork_cancel_cgroup:
@@ -2586,6 +2599,11 @@ struct task_struct * __init fork_idle(int cpu)
 	}
 
 	return task;
+}
+
+struct mm_struct *copy_init_mm(void)
+{
+	return dup_mm(NULL, &init_mm);
 }
 
 /*
@@ -2991,27 +3009,10 @@ static void sighand_ctor(void *data)
 	init_waitqueue_head(&sighand->signalfd_wqh);
 }
 
-void __init mm_cache_init(void)
+void __init proc_caches_init(void)
 {
 	unsigned int mm_size;
 
-	/*
-	 * The mm_cpumask is located at the end of mm_struct, and is
-	 * dynamically sized based on the maximum CPU number this system
-	 * can have, taking hotplug into account (nr_cpu_ids).
-	 */
-	mm_size = sizeof(struct mm_struct) + cpumask_size();
-
-	mm_cachep = kmem_cache_create_usercopy("mm_struct",
-			mm_size, ARCH_MIN_MMSTRUCT_ALIGN,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
-			offsetof(struct mm_struct, saved_auxv),
-			sizeof_field(struct mm_struct, saved_auxv),
-			NULL);
-}
-
-void __init proc_caches_init(void)
-{
 	sighand_cachep = kmem_cache_create("sighand_cache",
 			sizeof(struct sighand_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_TYPESAFE_BY_RCU|
@@ -3029,6 +3030,19 @@ void __init proc_caches_init(void)
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);
 
+	/*
+	 * The mm_cpumask is located at the end of mm_struct, and is
+	 * dynamically sized based on the maximum CPU number this system
+	 * can have, taking hotplug into account (nr_cpu_ids).
+	 */
+	mm_size = sizeof(struct mm_struct) + cpumask_size();
+
+	mm_cachep = kmem_cache_create_usercopy("mm_struct",
+			mm_size, ARCH_MIN_MMSTRUCT_ALIGN,
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
+			offsetof(struct mm_struct, saved_auxv),
+			sizeof_field(struct mm_struct, saved_auxv),
+			NULL);
 	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
 	mmap_init();
 	nsproxy_cache_init();

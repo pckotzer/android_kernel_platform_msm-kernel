@@ -306,7 +306,7 @@ static int ovl_set_timestamps(struct dentry *upperdentry, struct kstat *stat)
 {
 	struct iattr attr = {
 		.ia_valid =
-		     ATTR_ATIME | ATTR_MTIME | ATTR_ATIME_SET | ATTR_MTIME_SET | ATTR_CTIME,
+		     ATTR_ATIME | ATTR_MTIME | ATTR_ATIME_SET | ATTR_MTIME_SET,
 		.ia_atime = stat->atime,
 		.ia_mtime = stat->mtime,
 	};
@@ -583,8 +583,7 @@ static int ovl_copy_up_inode(struct ovl_copy_up_ctx *c, struct dentry *temp)
 	if (err)
 		return err;
 
-	if (inode->i_flags & OVL_COPY_I_FLAGS_MASK &&
-	    (S_ISREG(c->stat.mode) || S_ISDIR(c->stat.mode))) {
+	if (inode->i_flags & OVL_COPY_I_FLAGS_MASK) {
 		/*
 		 * Copy the fileattr inode flags that are the source of already
 		 * copied i_flags

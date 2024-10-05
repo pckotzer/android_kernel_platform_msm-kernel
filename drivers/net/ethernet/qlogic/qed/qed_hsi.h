@@ -3012,102 +3012,96 @@ struct iro {
 /***************************** Public Functions *******************************/
 
 /**
- * qed_dbg_set_bin_ptr(): Sets a pointer to the binary data with debug
- *                        arrays.
+ * @brief qed_dbg_set_bin_ptr - Sets a pointer to the binary data with debug
+ *	arrays.
  *
- * @p_hwfn: HW device data.
- * @bin_ptr: A pointer to the binary data with debug arrays.
- *
- * Return: enum dbg status.
+ * @param p_hwfn -	    HW device data
+ * @param bin_ptr - a pointer to the binary data with debug arrays.
  */
 enum dbg_status qed_dbg_set_bin_ptr(struct qed_hwfn *p_hwfn,
 				    const u8 * const bin_ptr);
 
 /**
- * qed_read_regs(): Reads registers into a buffer (using GRC).
+ * @brief qed_read_regs - Reads registers into a buffer (using GRC).
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf: Destination buffer.
- * @addr: Source GRC address in dwords.
- * @len: Number of registers to read.
- *
- * Return: Void.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf - Destination buffer.
+ * @param addr - Source GRC address in dwords.
+ * @param len - Number of registers to read.
  */
 void qed_read_regs(struct qed_hwfn *p_hwfn,
 		   struct qed_ptt *p_ptt, u32 *buf, u32 addr, u32 len);
 
 /**
- * qed_read_fw_info(): Reads FW info from the chip.
- *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @fw_info: (Out) a pointer to write the FW info into.
- *
- * Return: True if the FW info was read successfully from one of the Storms,
- * or false if all Storms are in reset.
+ * @brief qed_read_fw_info - Reads FW info from the chip.
  *
  * The FW info contains FW-related information, such as the FW version,
  * FW image (main/L2B/kuku), FW timestamp, etc.
  * The FW info is read from the internal RAM of the first Storm that is not in
  * reset.
+ *
+ * @param p_hwfn -	    HW device data
+ * @param p_ptt -	    Ptt window used for writing the registers.
+ * @param fw_info -	Out: a pointer to write the FW info into.
+ *
+ * @return true if the FW info was read successfully from one of the Storms,
+ * or false if all Storms are in reset.
  */
 bool qed_read_fw_info(struct qed_hwfn *p_hwfn,
 		      struct qed_ptt *p_ptt, struct fw_info *fw_info);
 /**
- * qed_dbg_grc_config(): Sets the value of a GRC parameter.
+ * @brief qed_dbg_grc_config - Sets the value of a GRC parameter.
  *
- * @p_hwfn: HW device data.
- * @grc_param: GRC parameter.
- * @val: Value to set.
+ * @param p_hwfn -	HW device data
+ * @param grc_param -	GRC parameter
+ * @param val -		Value to set.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *         - Grc_param is invalid.
- *         - Val is outside the allowed boundaries.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- grc_param is invalid
+ *	- val is outside the allowed boundaries
  */
 enum dbg_status qed_dbg_grc_config(struct qed_hwfn *p_hwfn,
 				   enum dbg_grc_params grc_param, u32 val);
 
 /**
- * qed_dbg_grc_set_params_default(): Reverts all GRC parameters to their
- *                                   default value.
+ * @brief qed_dbg_grc_set_params_default - Reverts all GRC parameters to their
+ *	default value.
  *
- * @p_hwfn: HW device data.
- *
- * Return: Void.
+ * @param p_hwfn		- HW device data
  */
 void qed_dbg_grc_set_params_default(struct qed_hwfn *p_hwfn);
 /**
- * qed_dbg_grc_get_dump_buf_size(): Returns the required buffer size for
- *                                  GRC Dump.
+ * @brief qed_dbg_grc_get_dump_buf_size - Returns the required buffer size for
+ *	GRC Dump.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) required buffer size (in dwords) for the GRC Dump
- *             data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for the GRC Dump
+ *	data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_grc_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 					      struct qed_ptt *p_ptt,
 					      u32 *buf_size);
 
 /**
- * qed_dbg_grc_dump(): Dumps GRC data into the specified buffer.
+ * @brief qed_dbg_grc_dump - Dumps GRC data into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the collected GRC data into.
- * @buf_size_in_dwords:Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the collected GRC data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *        - The version wasn't set.
- *        - The specified dump buffer is too small.
- *          Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified dump buffer is too small
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_grc_dump(struct qed_hwfn *p_hwfn,
 				 struct qed_ptt *p_ptt,
@@ -3116,36 +3110,36 @@ enum dbg_status qed_dbg_grc_dump(struct qed_hwfn *p_hwfn,
 				 u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_idle_chk_get_dump_buf_size(): Returns the required buffer size
- *                                       for idle check results.
+ * @brief qed_dbg_idle_chk_get_dump_buf_size - Returns the required buffer size
+ *	for idle check results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) required buffer size (in dwords) for the idle check
- *             data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for the idle check
+ *	data.
  *
- * return: Error if one of the following holds:
- *        - The version wasn't set.
- *          Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_idle_chk_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 						   struct qed_ptt *p_ptt,
 						   u32 *buf_size);
 
 /**
- * qed_dbg_idle_chk_dump: Performs idle check and writes the results
- *                        into the specified buffer.
+ * @brief qed_dbg_idle_chk_dump - Performs idle check and writes the results
+ *	into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the idle check data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the idle check data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *         - The specified buffer is too small.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_idle_chk_dump(struct qed_hwfn *p_hwfn,
 				      struct qed_ptt *p_ptt,
@@ -3154,42 +3148,42 @@ enum dbg_status qed_dbg_idle_chk_dump(struct qed_hwfn *p_hwfn,
 				      u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_mcp_trace_get_dump_buf_size(): Returns the required buffer size
- *                                        for mcp trace results.
+ * @brief qed_dbg_mcp_trace_get_dump_buf_size - Returns the required buffer size
+ *	for mcp trace results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) Required buffer size (in dwords) for mcp trace data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for mcp trace data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *         - The trace data in MCP scratchpad contain an invalid signature.
- *         - The bundle ID in NVRAM is invalid.
- *         - The trace meta data cannot be found (in NVRAM or image file).
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the trace data in MCP scratchpad contain an invalid signature
+ *	- the bundle ID in NVRAM is invalid
+ *	- the trace meta data cannot be found (in NVRAM or image file)
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_mcp_trace_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 						    struct qed_ptt *p_ptt,
 						    u32 *buf_size);
 
 /**
- * qed_dbg_mcp_trace_dump(): Performs mcp trace and writes the results
- *                           into the specified buffer.
+ * @brief qed_dbg_mcp_trace_dump - Performs mcp trace and writes the results
+ *	into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the mcp trace data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the mcp trace data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *        - The version wasn't set.
- *        - The specified buffer is too small.
- *        - The trace data in MCP scratchpad contain an invalid signature.
- *        - The bundle ID in NVRAM is invalid.
- *        - The trace meta data cannot be found (in NVRAM or image file).
- *        - The trace meta data cannot be read (from NVRAM or image file).
- *          Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ *	- the trace data in MCP scratchpad contain an invalid signature
+ *	- the bundle ID in NVRAM is invalid
+ *	- the trace meta data cannot be found (in NVRAM or image file)
+ *	- the trace meta data cannot be read (from NVRAM or image file)
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_mcp_trace_dump(struct qed_hwfn *p_hwfn,
 				       struct qed_ptt *p_ptt,
@@ -3198,36 +3192,36 @@ enum dbg_status qed_dbg_mcp_trace_dump(struct qed_hwfn *p_hwfn,
 				       u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_reg_fifo_get_dump_buf_size(): Returns the required buffer size
- *                                       for grc trace fifo results.
+ * @brief qed_dbg_reg_fifo_get_dump_buf_size - Returns the required buffer size
+ *	for grc trace fifo results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) Required buffer size (in dwords) for reg fifo data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for reg fifo data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_reg_fifo_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 						   struct qed_ptt *p_ptt,
 						   u32 *buf_size);
 
 /**
- * qed_dbg_reg_fifo_dump(): Reads the reg fifo and writes the results into
- *                          the specified buffer.
+ * @brief qed_dbg_reg_fifo_dump - Reads the reg fifo and writes the results into
+ *	the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the reg fifo data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the reg fifo data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *        - The version wasn't set.
- *        - The specified buffer is too small.
- *        - DMAE transaction failed.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ *	- DMAE transaction failed
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_reg_fifo_dump(struct qed_hwfn *p_hwfn,
 				      struct qed_ptt *p_ptt,
@@ -3236,37 +3230,37 @@ enum dbg_status qed_dbg_reg_fifo_dump(struct qed_hwfn *p_hwfn,
 				      u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_igu_fifo_get_dump_buf_size(): Returns the required buffer size
- *                                       for the IGU fifo results.
+ * @brief qed_dbg_igu_fifo_get_dump_buf_size - Returns the required buffer size
+ *	for the IGU fifo results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) Required buffer size (in dwords) for the IGU fifo
- *            data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for the IGU fifo
+ *	data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_igu_fifo_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 						   struct qed_ptt *p_ptt,
 						   u32 *buf_size);
 
 /**
- * qed_dbg_igu_fifo_dump(): Reads the IGU fifo and writes the results into
- *                          the specified buffer.
+ * @brief qed_dbg_igu_fifo_dump - Reads the IGU fifo and writes the results into
+ *	the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the IGU fifo data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the IGU fifo data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set
- *         - The specified buffer is too small
- *         - DMAE transaction failed
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ *	- DMAE transaction failed
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_igu_fifo_dump(struct qed_hwfn *p_hwfn,
 				      struct qed_ptt *p_ptt,
@@ -3275,37 +3269,37 @@ enum dbg_status qed_dbg_igu_fifo_dump(struct qed_hwfn *p_hwfn,
 				      u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_protection_override_get_dump_buf_size(): Returns the required
- *        buffer size for protection override window results.
+ * @brief qed_dbg_protection_override_get_dump_buf_size - Returns the required
+ *	buffer size for protection override window results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) Required buffer size (in dwords) for protection
- *             override data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for protection
+ *	override data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status
 qed_dbg_protection_override_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 					      struct qed_ptt *p_ptt,
 					      u32 *buf_size);
 /**
- * qed_dbg_protection_override_dump(): Reads protection override window
- *       entries and writes the results into the specified buffer.
+ * @brief qed_dbg_protection_override_dump - Reads protection override window
+ *	entries and writes the results into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the protection override data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the protection override data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * @return: Error if one of the following holds:
- *          - The version wasn't set.
- *          - The specified buffer is too small.
- *          - DMAE transaction failed.
- *             Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ *	- DMAE transaction failed
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_protection_override_dump(struct qed_hwfn *p_hwfn,
 						 struct qed_ptt *p_ptt,
@@ -3313,34 +3307,34 @@ enum dbg_status qed_dbg_protection_override_dump(struct qed_hwfn *p_hwfn,
 						 u32 buf_size_in_dwords,
 						 u32 *num_dumped_dwords);
 /**
- * qed_dbg_fw_asserts_get_dump_buf_size(): Returns the required buffer
- *                                         size for FW Asserts results.
+ * @brief qed_dbg_fw_asserts_get_dump_buf_size - Returns the required buffer
+ *	size for FW Asserts results.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @buf_size: (OUT) Required buffer size (in dwords) for FW Asserts data.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param buf_size - OUT: required buffer size (in dwords) for FW Asserts data.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_fw_asserts_get_dump_buf_size(struct qed_hwfn *p_hwfn,
 						     struct qed_ptt *p_ptt,
 						     u32 *buf_size);
 /**
- * qed_dbg_fw_asserts_dump(): Reads the FW Asserts and writes the results
- *                            into the specified buffer.
+ * @brief qed_dbg_fw_asserts_dump - Reads the FW Asserts and writes the results
+ *	into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dump_buf: Pointer to write the FW Asserts data into.
- * @buf_size_in_dwords: Size of the specified buffer in dwords.
- * @num_dumped_dwords: (OUT) number of dumped dwords.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - Ptt window used for writing the registers.
+ * @param dump_buf - Pointer to write the FW Asserts data into.
+ * @param buf_size_in_dwords - Size of the specified buffer in dwords.
+ * @param num_dumped_dwords - OUT: number of dumped dwords.
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *         - The specified buffer is too small.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ *	- the specified buffer is too small
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_fw_asserts_dump(struct qed_hwfn *p_hwfn,
 					struct qed_ptt *p_ptt,
@@ -3349,19 +3343,19 @@ enum dbg_status qed_dbg_fw_asserts_dump(struct qed_hwfn *p_hwfn,
 					u32 *num_dumped_dwords);
 
 /**
- * qed_dbg_read_attn(): Reads the attention registers of the specified
+ * @brief qed_dbg_read_attn - Reads the attention registers of the specified
  * block and type, and writes the results into the specified buffer.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @block: Block ID.
- * @attn_type: Attention type.
- * @clear_status: Indicates if the attention status should be cleared.
- * @results:  (OUT) Pointer to write the read results into.
+ * @param p_hwfn -	 HW device data
+ * @param p_ptt -	 Ptt window used for writing the registers.
+ * @param block -	 Block ID.
+ * @param attn_type -	 Attention type.
+ * @param clear_status - Indicates if the attention status should be cleared.
+ * @param results -	 OUT: Pointer to write the read results into
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set
- *          Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_read_attn(struct qed_hwfn *p_hwfn,
 				  struct qed_ptt *p_ptt,
@@ -3371,15 +3365,15 @@ enum dbg_status qed_dbg_read_attn(struct qed_hwfn *p_hwfn,
 				  struct dbg_attn_block_result *results);
 
 /**
- * qed_dbg_print_attn(): Prints attention registers values in the
- *                       specified results struct.
+ * @brief qed_dbg_print_attn - Prints attention registers values in the
+ *	specified results struct.
  *
- * @p_hwfn: HW device data.
- * @results: Pointer to the attention read results
+ * @param p_hwfn
+ * @param results - Pointer to the attention read results
  *
- * Return: Error if one of the following holds:
- *        - The version wasn't set
- *          Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_print_attn(struct qed_hwfn *p_hwfn,
 				   struct dbg_attn_block_result *results);
@@ -3426,64 +3420,60 @@ struct dbg_tools_user_data {
 /***************************** Public Functions *******************************/
 
 /**
- * qed_dbg_user_set_bin_ptr(): Sets a pointer to the binary data with
- *                             debug arrays.
+ * @brief qed_dbg_user_set_bin_ptr - Sets a pointer to the binary data with
+ *	debug arrays.
  *
- * @p_hwfn: HW device data.
- * @bin_ptr: a pointer to the binary data with debug arrays.
- *
- * Return: dbg_status.
+ * @param p_hwfn - HW device data
+ * @param bin_ptr - a pointer to the binary data with debug arrays.
  */
 enum dbg_status qed_dbg_user_set_bin_ptr(struct qed_hwfn *p_hwfn,
 					 const u8 * const bin_ptr);
 
 /**
- * qed_dbg_alloc_user_data(): Allocates user debug data.
+ * @brief qed_dbg_alloc_user_data - Allocates user debug data.
  *
- * @p_hwfn: HW device data.
- * @user_data_ptr: (OUT) a pointer to the allocated memory.
- *
- * Return: dbg_status.
+ * @param p_hwfn -		 HW device data
+ * @param user_data_ptr - OUT: a pointer to the allocated memory.
  */
 enum dbg_status qed_dbg_alloc_user_data(struct qed_hwfn *p_hwfn,
 					void **user_data_ptr);
 
 /**
- * qed_dbg_get_status_str(): Returns a string for the specified status.
+ * @brief qed_dbg_get_status_str - Returns a string for the specified status.
  *
- * @status: A debug status code.
+ * @param status - a debug status code.
  *
- * Return: A string for the specified status.
+ * @return a string for the specified status
  */
 const char *qed_dbg_get_status_str(enum dbg_status status);
 
 /**
- * qed_get_idle_chk_results_buf_size(): Returns the required buffer size
- *                                      for idle check results (in bytes).
+ * @brief qed_get_idle_chk_results_buf_size - Returns the required buffer size
+ *	for idle check results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: idle check dump buffer.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                    results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - idle check dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_get_idle_chk_results_buf_size(struct qed_hwfn *p_hwfn,
 						  u32 *dump_buf,
 						  u32  num_dumped_dwords,
 						  u32 *results_buf_size);
 /**
- * qed_print_idle_chk_results(): Prints idle check results
+ * @brief qed_print_idle_chk_results - Prints idle check results
  *
- * @p_hwfn: HW device data.
- * @dump_buf: idle check dump buffer.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf: buffer for printing the idle check results.
- * @num_errors: (OUT) number of errors found in idle check.
- * @num_warnings: (OUT) number of warnings found in idle check.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - idle check dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the idle check results.
+ * @param num_errors - OUT: number of errors found in idle check.
+ * @param num_warnings - OUT: number of warnings found in idle check.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_idle_chk_results(struct qed_hwfn *p_hwfn,
 					   u32 *dump_buf,
@@ -3493,30 +3483,28 @@ enum dbg_status qed_print_idle_chk_results(struct qed_hwfn *p_hwfn,
 					   u32 *num_warnings);
 
 /**
- * qed_dbg_mcp_trace_set_meta_data(): Sets the MCP Trace meta data.
- *
- * @p_hwfn: HW device data.
- * @meta_buf: Meta buffer.
- *
- * Return: Void.
+ * @brief qed_dbg_mcp_trace_set_meta_data - Sets the MCP Trace meta data.
  *
  * Needed in case the MCP Trace dump doesn't contain the meta data (e.g. due to
  * no NVRAM access).
+ *
+ * @param data - pointer to MCP Trace meta data
+ * @param size - size of MCP Trace meta data in dwords
  */
 void qed_dbg_mcp_trace_set_meta_data(struct qed_hwfn *p_hwfn,
 				     const u32 *meta_buf);
 
 /**
- * qed_get_mcp_trace_results_buf_size(): Returns the required buffer size
- *                                       for MCP Trace results (in bytes).
+ * @brief qed_get_mcp_trace_results_buf_size - Returns the required buffer size
+ *	for MCP Trace results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: MCP Trace dump buffer.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                    results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - MCP Trace dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Rrror if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_get_mcp_trace_results_buf_size(struct qed_hwfn *p_hwfn,
 						   u32 *dump_buf,
@@ -3524,14 +3512,14 @@ enum dbg_status qed_get_mcp_trace_results_buf_size(struct qed_hwfn *p_hwfn,
 						   u32 *results_buf_size);
 
 /**
- * qed_print_mcp_trace_results(): Prints MCP Trace results
+ * @brief qed_print_mcp_trace_results - Prints MCP Trace results
  *
- * @p_hwfn: HW device data.
- * @dump_buf: MCP trace dump buffer, starting from the header.
- * @num_dumped_dwords: Member of dwords that were dumped.
- * @results_buf: Buffer for printing the mcp trace results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - mcp trace dump buffer, starting from the header.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the mcp trace results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_mcp_trace_results(struct qed_hwfn *p_hwfn,
 					    u32 *dump_buf,
@@ -3539,30 +3527,30 @@ enum dbg_status qed_print_mcp_trace_results(struct qed_hwfn *p_hwfn,
 					    char *results_buf);
 
 /**
- * qed_print_mcp_trace_results_cont(): Prints MCP Trace results, and
+ * @brief qed_print_mcp_trace_results_cont - Prints MCP Trace results, and
  * keeps the MCP trace meta data allocated, to support continuous MCP Trace
  * parsing. After the continuous parsing ends, mcp_trace_free_meta_data should
  * be called to free the meta data.
  *
- * @p_hwfn: HW device data.
- * @dump_buf: MVP trace dump buffer, starting from the header.
- * @results_buf: Buffer for printing the mcp trace results.
+ * @param p_hwfn -	      HW device data
+ * @param dump_buf -	      mcp trace dump buffer, starting from the header.
+ * @param results_buf -	      buffer for printing the mcp trace results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_mcp_trace_results_cont(struct qed_hwfn *p_hwfn,
 						 u32 *dump_buf,
 						 char *results_buf);
 
 /**
- * qed_print_mcp_trace_line(): Prints MCP Trace results for a single line
+ * @brief print_mcp_trace_line - Prints MCP Trace results for a single line
  *
- * @p_hwfn: HW device data.
- * @dump_buf: MCP trace dump buffer, starting from the header.
- * @num_dumped_bytes: Number of bytes that were dumped.
- * @results_buf: Buffer for printing the mcp trace results.
+ * @param p_hwfn -	      HW device data
+ * @param dump_buf -	      mcp trace dump buffer, starting from the header.
+ * @param num_dumped_bytes -  number of bytes that were dumped.
+ * @param results_buf -	      buffer for printing the mcp trace results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_mcp_trace_line(struct qed_hwfn *p_hwfn,
 					 u8 *dump_buf,
@@ -3570,26 +3558,24 @@ enum dbg_status qed_print_mcp_trace_line(struct qed_hwfn *p_hwfn,
 					 char *results_buf);
 
 /**
- * qed_mcp_trace_free_meta_data(): Frees the MCP Trace meta data.
+ * @brief mcp_trace_free_meta_data - Frees the MCP Trace meta data.
  * Should be called after continuous MCP Trace parsing.
  *
- * @p_hwfn: HW device data.
- *
- * Return: Void.
+ * @param p_hwfn - HW device data
  */
 void qed_mcp_trace_free_meta_data(struct qed_hwfn *p_hwfn);
 
 /**
- * qed_get_reg_fifo_results_buf_size(): Returns the required buffer size
- *                                      for reg_fifo results (in bytes).
+ * @brief qed_get_reg_fifo_results_buf_size - Returns the required buffer size
+ *	for reg_fifo results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: Reg fifo dump buffer.
- * @num_dumped_dwords: Number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                     results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - reg fifo dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_get_reg_fifo_results_buf_size(struct qed_hwfn *p_hwfn,
 						  u32 *dump_buf,
@@ -3597,14 +3583,14 @@ enum dbg_status qed_get_reg_fifo_results_buf_size(struct qed_hwfn *p_hwfn,
 						  u32 *results_buf_size);
 
 /**
- * qed_print_reg_fifo_results(): Prints reg fifo results.
+ * @brief qed_print_reg_fifo_results - Prints reg fifo results
  *
- * @p_hwfn: HW device data.
- * @dump_buf: Reg fifo dump buffer, starting from the header.
- * @num_dumped_dwords: Number of dwords that were dumped.
- * @results_buf: Buffer for printing the reg fifo results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - reg fifo dump buffer, starting from the header.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the reg fifo results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_reg_fifo_results(struct qed_hwfn *p_hwfn,
 					   u32 *dump_buf,
@@ -3612,16 +3598,16 @@ enum dbg_status qed_print_reg_fifo_results(struct qed_hwfn *p_hwfn,
 					   char *results_buf);
 
 /**
- * qed_get_igu_fifo_results_buf_size(): Returns the required buffer size
- *                                      for igu_fifo results (in bytes).
+ * @brief qed_get_igu_fifo_results_buf_size - Returns the required buffer size
+ *	for igu_fifo results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: IGU fifo dump buffer.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                    results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - IGU fifo dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_get_igu_fifo_results_buf_size(struct qed_hwfn *p_hwfn,
 						  u32 *dump_buf,
@@ -3629,14 +3615,14 @@ enum dbg_status qed_get_igu_fifo_results_buf_size(struct qed_hwfn *p_hwfn,
 						  u32 *results_buf_size);
 
 /**
- * qed_print_igu_fifo_results(): Prints IGU fifo results
+ * @brief qed_print_igu_fifo_results - Prints IGU fifo results
  *
- * @p_hwfn: HW device data.
- * @dump_buf: IGU fifo dump buffer, starting from the header.
- * @num_dumped_dwords: Number of dwords that were dumped.
- * @results_buf: Buffer for printing the IGU fifo results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - IGU fifo dump buffer, starting from the header.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the IGU fifo results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_igu_fifo_results(struct qed_hwfn *p_hwfn,
 					   u32 *dump_buf,
@@ -3644,16 +3630,16 @@ enum dbg_status qed_print_igu_fifo_results(struct qed_hwfn *p_hwfn,
 					   char *results_buf);
 
 /**
- * qed_get_protection_override_results_buf_size(): Returns the required
- *         buffer size for protection override results (in bytes).
+ * @brief qed_get_protection_override_results_buf_size - Returns the required
+ *	buffer size for protection override results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: Protection override dump buffer.
- * @num_dumped_dwords: Number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                    results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - protection override dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status
 qed_get_protection_override_results_buf_size(struct qed_hwfn *p_hwfn,
@@ -3662,15 +3648,15 @@ qed_get_protection_override_results_buf_size(struct qed_hwfn *p_hwfn,
 					     u32 *results_buf_size);
 
 /**
- * qed_print_protection_override_results(): Prints protection override
- *                                          results.
+ * @brief qed_print_protection_override_results - Prints protection override
+ *	results.
  *
- * @p_hwfn: HW device data.
- * @dump_buf: Protection override dump buffer, starting from the header.
- * @num_dumped_dwords: Number of dwords that were dumped.
- * @results_buf: Buffer for printing the reg fifo results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - protection override dump buffer, starting from the header.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the reg fifo results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_protection_override_results(struct qed_hwfn *p_hwfn,
 						      u32 *dump_buf,
@@ -3678,16 +3664,16 @@ enum dbg_status qed_print_protection_override_results(struct qed_hwfn *p_hwfn,
 						      char *results_buf);
 
 /**
- * qed_get_fw_asserts_results_buf_size(): Returns the required buffer size
- *                                        for FW Asserts results (in bytes).
+ * @brief qed_get_fw_asserts_results_buf_size - Returns the required buffer size
+ *	for FW Asserts results (in bytes).
  *
- * @p_hwfn: HW device data.
- * @dump_buf: FW Asserts dump buffer.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf_size: (OUT) required buffer size (in bytes) for the parsed
- *                    results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - FW Asserts dump buffer.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf_size - OUT: required buffer size (in bytes) for the parsed
+ *	results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_get_fw_asserts_results_buf_size(struct qed_hwfn *p_hwfn,
 						    u32 *dump_buf,
@@ -3695,14 +3681,14 @@ enum dbg_status qed_get_fw_asserts_results_buf_size(struct qed_hwfn *p_hwfn,
 						    u32 *results_buf_size);
 
 /**
- * qed_print_fw_asserts_results(): Prints FW Asserts results.
+ * @brief qed_print_fw_asserts_results - Prints FW Asserts results
  *
- * @p_hwfn: HW device data.
- * @dump_buf: FW Asserts dump buffer, starting from the header.
- * @num_dumped_dwords: number of dwords that were dumped.
- * @results_buf: buffer for printing the FW Asserts results.
+ * @param p_hwfn - HW device data
+ * @param dump_buf - FW Asserts dump buffer, starting from the header.
+ * @param num_dumped_dwords - number of dwords that were dumped.
+ * @param results_buf - buffer for printing the FW Asserts results.
  *
- * Return: Error if the parsing fails, ok otherwise.
+ * @return error if the parsing fails, ok otherwise.
  */
 enum dbg_status qed_print_fw_asserts_results(struct qed_hwfn *p_hwfn,
 					     u32 *dump_buf,
@@ -3710,15 +3696,15 @@ enum dbg_status qed_print_fw_asserts_results(struct qed_hwfn *p_hwfn,
 					     char *results_buf);
 
 /**
- * qed_dbg_parse_attn(): Parses and prints attention registers values in
- *                      the specified results struct.
+ * @brief qed_dbg_parse_attn - Parses and prints attention registers values in
+ * the specified results struct.
  *
- * @p_hwfn: HW device data.
- * @results: Pointer to the attention read results
+ * @param p_hwfn -  HW device data
+ * @param results - Pointer to the attention read results
  *
- * Return: Error if one of the following holds:
- *         - The version wasn't set.
- *           Otherwise, returns ok.
+ * @return error if one of the following holds:
+ *	- the version wasn't set
+ * Otherwise, returns ok.
  */
 enum dbg_status qed_dbg_parse_attn(struct qed_hwfn *p_hwfn,
 				   struct dbg_attn_block_result *results);
@@ -3760,18 +3746,18 @@ enum dbg_status qed_dbg_parse_attn(struct qed_hwfn *p_hwfn,
 #define GTT_BAR0_MAP_REG_PSDM_RAM	0x01a000UL
 
 /**
- * qed_qm_pf_mem_size(): Prepare QM ILT sizes.
- *
- * @num_pf_cids: Number of connections used by this PF.
- * @num_vf_cids: Number of connections used by VFs of this PF.
- * @num_tids: Number of tasks used by this PF.
- * @num_pf_pqs: Number of PQs used by this PF.
- * @num_vf_pqs: Number of PQs used by VFs of this PF.
- *
- * Return: The required host memory size in 4KB units.
+ * @brief qed_qm_pf_mem_size - prepare QM ILT sizes
  *
  * Returns the required host memory size in 4KB units.
  * Must be called before all QM init HSI functions.
+ *
+ * @param num_pf_cids - number of connections used by this PF
+ * @param num_vf_cids - number of connections used by VFs of this PF
+ * @param num_tids - number of tasks used by this PF
+ * @param num_pf_pqs - number of PQs used by this PF
+ * @param num_vf_pqs - number of PQs used by VFs of this PF
+ *
+ * @return The required host memory size in 4KB units.
  */
 u32 qed_qm_pf_mem_size(u32 num_pf_cids,
 		       u32 num_vf_cids,
@@ -3814,74 +3800,74 @@ int qed_qm_pf_rt_init(struct qed_hwfn *p_hwfn,
 	struct qed_qm_pf_rt_init_params *p_params);
 
 /**
- * qed_init_pf_wfq(): Initializes the WFQ weight of the specified PF.
+ * @brief qed_init_pf_wfq - Initializes the WFQ weight of the specified PF
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers
- * @pf_id: PF ID
- * @pf_wfq: WFQ weight. Must be non-zero.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers
+ * @param pf_id - PF ID
+ * @param pf_wfq - WFQ weight. Must be non-zero.
  *
- * Return: 0 on success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int qed_init_pf_wfq(struct qed_hwfn *p_hwfn,
 		    struct qed_ptt *p_ptt, u8 pf_id, u16 pf_wfq);
 
 /**
- * qed_init_pf_rl(): Initializes the rate limit of the specified PF
+ * @brief qed_init_pf_rl - Initializes the rate limit of the specified PF
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @pf_id: PF ID.
- * @pf_rl: rate limit in Mb/sec units
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers
+ * @param pf_id - PF ID
+ * @param pf_rl - rate limit in Mb/sec units
  *
- * Return: 0 on success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int qed_init_pf_rl(struct qed_hwfn *p_hwfn,
 		   struct qed_ptt *p_ptt, u8 pf_id, u32 pf_rl);
 
 /**
- * qed_init_vport_wfq(): Initializes the WFQ weight of the specified VPORT
+ * @brief qed_init_vport_wfq Initializes the WFQ weight of the specified VPORT
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers
- * @first_tx_pq_id: An array containing the first Tx PQ ID associated
- *                  with the VPORT for each TC. This array is filled by
- *                  qed_qm_pf_rt_init
- * @wfq: WFQ weight. Must be non-zero.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers
+ * @param first_tx_pq_id- An array containing the first Tx PQ ID associated
+ *	  with the VPORT for each TC. This array is filled by
+ *	  qed_qm_pf_rt_init
+ * @param vport_wfq - WFQ weight. Must be non-zero.
  *
- * Return: 0 on success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int qed_init_vport_wfq(struct qed_hwfn *p_hwfn,
 		       struct qed_ptt *p_ptt,
 		       u16 first_tx_pq_id[NUM_OF_TCS], u16 wfq);
 
 /**
- * qed_init_global_rl():  Initializes the rate limit of the specified
- * rate limiter.
+ * @brief qed_init_global_rl - Initializes the rate limit of the specified
+ * rate limiter
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @rl_id: RL ID.
- * @rate_limit: Rate limit in Mb/sec units
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers
+ * @param rl_id - RL ID
+ * @param rate_limit - rate limit in Mb/sec units
  *
- * Return: 0 on success, -1 on error.
+ * @return 0 on success, -1 on error.
  */
 int qed_init_global_rl(struct qed_hwfn *p_hwfn,
 		       struct qed_ptt *p_ptt,
 		       u16 rl_id, u32 rate_limit);
 
 /**
- * qed_send_qm_stop_cmd(): Sends a stop command to the QM.
+ * @brief qed_send_qm_stop_cmd  Sends a stop command to the QM
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @is_release_cmd: true for release, false for stop.
- * @is_tx_pq: true for Tx PQs, false for Other PQs.
- * @start_pq: first PQ ID to stop
- * @num_pqs: Number of PQs to stop, starting from start_pq.
+ * @param p_hwfn
+ * @param p_ptt
+ * @param is_release_cmd - true for release, false for stop.
+ * @param is_tx_pq - true for Tx PQs, false for Other PQs.
+ * @param start_pq - first PQ ID to stop
+ * @param num_pqs - Number of PQs to stop, starting from start_pq.
  *
- * Return: Bool, true if successful, false if timeout occurred while waiting
- *         for QM command done.
+ * @return bool, true if successful, false if timeout occurred while waiting for
+ *	QM command done.
  */
 bool qed_send_qm_stop_cmd(struct qed_hwfn *p_hwfn,
 			  struct qed_ptt *p_ptt,
@@ -3889,64 +3875,53 @@ bool qed_send_qm_stop_cmd(struct qed_hwfn *p_hwfn,
 			  bool is_tx_pq, u16 start_pq, u16 num_pqs);
 
 /**
- * qed_set_vxlan_dest_port(): Initializes vxlan tunnel destination udp port.
+ * @brief qed_set_vxlan_dest_port - initializes vxlan tunnel destination udp port
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dest_port: vxlan destination udp port.
- *
- * Return: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param dest_port - vxlan destination udp port.
  */
 void qed_set_vxlan_dest_port(struct qed_hwfn *p_hwfn,
 			     struct qed_ptt *p_ptt, u16 dest_port);
 
 /**
- * qed_set_vxlan_enable(): Enable or disable VXLAN tunnel in HW.
+ * @brief qed_set_vxlan_enable - enable or disable VXLAN tunnel in HW
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @vxlan_enable: vxlan enable flag.
- *
- * Return: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param vxlan_enable - vxlan enable flag.
  */
 void qed_set_vxlan_enable(struct qed_hwfn *p_hwfn,
 			  struct qed_ptt *p_ptt, bool vxlan_enable);
 
 /**
- * qed_set_gre_enable(): Enable or disable GRE tunnel in HW.
+ * @brief qed_set_gre_enable - enable or disable GRE tunnel in HW
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @eth_gre_enable: Eth GRE enable flag.
- * @ip_gre_enable: IP GRE enable flag.
- *
- * Return: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param eth_gre_enable - eth GRE enable enable flag.
+ * @param ip_gre_enable - IP GRE enable enable flag.
  */
 void qed_set_gre_enable(struct qed_hwfn *p_hwfn,
 			struct qed_ptt *p_ptt,
 			bool eth_gre_enable, bool ip_gre_enable);
 
 /**
- * qed_set_geneve_dest_port(): Initializes geneve tunnel destination udp port
+ * @brief qed_set_geneve_dest_port - initializes geneve tunnel destination udp port
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @dest_port: Geneve destination udp port.
- *
- * Retur: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param dest_port - geneve destination udp port.
  */
 void qed_set_geneve_dest_port(struct qed_hwfn *p_hwfn,
 			      struct qed_ptt *p_ptt, u16 dest_port);
 
 /**
- * qed_set_geneve_enable(): Enable or disable GRE tunnel in HW.
+ * @brief qed_set_gre_enable - enable or disable GRE tunnel in HW
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @eth_geneve_enable: Eth GENEVE enable flag.
- * @ip_geneve_enable: IP GENEVE enable flag.
- *
- * Return: Void.
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param eth_geneve_enable - eth GENEVE enable enable flag.
+ * @param ip_geneve_enable - IP GENEVE enable enable flag.
  */
 void qed_set_geneve_enable(struct qed_hwfn *p_hwfn,
 			   struct qed_ptt *p_ptt,
@@ -3956,29 +3931,25 @@ void qed_set_vxlan_no_l2_enable(struct qed_hwfn *p_hwfn,
 				struct qed_ptt *p_ptt, bool enable);
 
 /**
- * qed_gft_disable(): Disable GFT.
+ * @brief qed_gft_disable - Disable GFT
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @pf_id: PF on which to disable GFT.
- *
- * Return: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param pf_id - pf on which to disable GFT.
  */
 void qed_gft_disable(struct qed_hwfn *p_hwfn, struct qed_ptt *p_ptt, u16 pf_id);
 
 /**
- * qed_gft_config(): Enable and configure HW for GFT.
+ * @brief qed_gft_config - Enable and configure HW for GFT
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @pf_id: PF on which to enable GFT.
- * @tcp: Set profile tcp packets.
- * @udp: Set profile udp  packet.
- * @ipv4: Set profile ipv4 packet.
- * @ipv6: Set profile ipv6 packet.
- * @profile_type: Define packet same fields. Use enum gft_profile_type.
- *
- * Return: Void.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param pf_id - pf on which to enable GFT.
+ * @param tcp - set profile tcp packets.
+ * @param udp - set profile udp  packet.
+ * @param ipv4 - set profile ipv4 packet.
+ * @param ipv6 - set profile ipv6 packet.
+ * @param profile_type - define packet same fields. Use enum gft_profile_type.
  */
 void qed_gft_config(struct qed_hwfn *p_hwfn,
 		    struct qed_ptt *p_ptt,
@@ -3988,120 +3959,107 @@ void qed_gft_config(struct qed_hwfn *p_hwfn,
 		    bool ipv4, bool ipv6, enum gft_profile_type profile_type);
 
 /**
- * qed_enable_context_validation(): Enable and configure context
- *                                  validation.
+ * @brief qed_enable_context_validation - Enable and configure context
+ *	validation.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- *
- * Return: Void.
+ * @param p_hwfn
+ * @param p_ptt - ptt window used for writing the registers.
  */
 void qed_enable_context_validation(struct qed_hwfn *p_hwfn,
 				   struct qed_ptt *p_ptt);
 
 /**
- * qed_calc_session_ctx_validation(): Calcualte validation byte for
- *                                    session context.
+ * @brief qed_calc_session_ctx_validation - Calcualte validation byte for
+ *	session context.
  *
- * @p_ctx_mem: Pointer to context memory.
- * @ctx_size: Context size.
- * @ctx_type: Context type.
- * @cid: Context cid.
- *
- * Return: Void.
+ * @param p_ctx_mem - pointer to context memory.
+ * @param ctx_size - context size.
+ * @param ctx_type - context type.
+ * @param cid - context cid.
  */
 void qed_calc_session_ctx_validation(void *p_ctx_mem,
 				     u16 ctx_size, u8 ctx_type, u32 cid);
 
 /**
- * qed_calc_task_ctx_validation(): Calcualte validation byte for task
- *                                 context.
+ * @brief qed_calc_task_ctx_validation - Calcualte validation byte for task
+ *	context.
  *
- * @p_ctx_mem: Pointer to context memory.
- * @ctx_size: Context size.
- * @ctx_type: Context type.
- * @tid: Context tid.
- *
- * Return: Void.
+ * @param p_ctx_mem - pointer to context memory.
+ * @param ctx_size - context size.
+ * @param ctx_type - context type.
+ * @param tid - context tid.
  */
 void qed_calc_task_ctx_validation(void *p_ctx_mem,
 				  u16 ctx_size, u8 ctx_type, u32 tid);
 
 /**
- * qed_memset_session_ctx(): Memset session context to 0 while
- *                            preserving validation bytes.
+ * @brief qed_memset_session_ctx - Memset session context to 0 while
+ *	preserving validation bytes.
  *
- * @p_ctx_mem: Pointer to context memory.
- * @ctx_size: Size to initialzie.
- * @ctx_type: Context type.
- *
- * Return: Void.
+ * @param p_hwfn -
+ * @param p_ctx_mem - pointer to context memory.
+ * @param ctx_size - size to initialzie.
+ * @param ctx_type - context type.
  */
 void qed_memset_session_ctx(void *p_ctx_mem, u32 ctx_size, u8 ctx_type);
 
 /**
- * qed_memset_task_ctx(): Memset task context to 0 while preserving
- *                        validation bytes.
+ * @brief qed_memset_task_ctx - Memset task context to 0 while preserving
+ *	validation bytes.
  *
- * @p_ctx_mem: Pointer to context memory.
- * @ctx_size: size to initialzie.
- * @ctx_type: context type.
- *
- * Return: Void.
+ * @param p_ctx_mem - pointer to context memory.
+ * @param ctx_size - size to initialzie.
+ * @param ctx_type - context type.
  */
 void qed_memset_task_ctx(void *p_ctx_mem, u32 ctx_size, u8 ctx_type);
 
 #define NUM_STORMS 6
 
 /**
- * qed_set_rdma_error_level(): Sets the RDMA assert level.
- *                             If the severity of the error will be
- *                             above the level, the FW will assert.
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @assert_level: An array of assert levels for each storm.
+ * @brief qed_set_rdma_error_level - Sets the RDMA assert level.
+ *                                   If the severity of the error will be
+ *                                   above the level, the FW will assert.
+ * @param p_hwfn - HW device data
+ * @param p_ptt - ptt window used for writing the registers
+ * @param assert_level - An array of assert levels for each storm.
  *
- * Return: Void.
  */
 void qed_set_rdma_error_level(struct qed_hwfn *p_hwfn,
 			      struct qed_ptt *p_ptt,
 			      u8 assert_level[NUM_STORMS]);
 /**
- * qed_fw_overlay_mem_alloc(): Allocates and fills the FW overlay memory.
+ * @brief qed_fw_overlay_mem_alloc - Allocates and fills the FW overlay memory.
  *
- * @p_hwfn: HW device data.
- * @fw_overlay_in_buf: The input FW overlay buffer.
- * @buf_size_in_bytes: The size of the input FW overlay buffer in bytes.
- *		        must be aligned to dwords.
+ * @param p_hwfn - HW device data
+ * @param fw_overlay_in_buf - the input FW overlay buffer.
+ * @param buf_size - the size of the input FW overlay buffer in bytes.
+ *		     must be aligned to dwords.
+ * @param fw_overlay_out_mem - OUT: a pointer to the allocated overlays memory.
  *
- * Return: A pointer to the allocated overlays memory,
+ * @return a pointer to the allocated overlays memory,
  * or NULL in case of failures.
  */
 struct phys_mem_desc *
 qed_fw_overlay_mem_alloc(struct qed_hwfn *p_hwfn,
-			 const u32 *const fw_overlay_in_buf,
+			 const u32 * const fw_overlay_in_buf,
 			 u32 buf_size_in_bytes);
 
 /**
- * qed_fw_overlay_init_ram(): Initializes the FW overlay RAM.
+ * @brief qed_fw_overlay_init_ram - Initializes the FW overlay RAM.
  *
- * @p_hwfn: HW device data.
- * @p_ptt: Ptt window used for writing the registers.
- * @fw_overlay_mem: the allocated FW overlay memory.
- *
- * Return: Void.
+ * @param p_hwfn - HW device data.
+ * @param p_ptt - ptt window used for writing the registers.
+ * @param fw_overlay_mem - the allocated FW overlay memory.
  */
 void qed_fw_overlay_init_ram(struct qed_hwfn *p_hwfn,
 			     struct qed_ptt *p_ptt,
 			     struct phys_mem_desc *fw_overlay_mem);
 
 /**
- * qed_fw_overlay_mem_free(): Frees the FW overlay memory.
+ * @brief qed_fw_overlay_mem_free - Frees the FW overlay memory.
  *
- * @p_hwfn: HW device data.
- * @fw_overlay_mem: The allocated FW overlay memory to free.
- *
- * Return: Void.
+ * @param p_hwfn - HW device data.
+ * @param fw_overlay_mem - the allocated FW overlay memory to free.
  */
 void qed_fw_overlay_mem_free(struct qed_hwfn *p_hwfn,
 			     struct phys_mem_desc *fw_overlay_mem);

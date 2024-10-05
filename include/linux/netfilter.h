@@ -136,11 +136,15 @@ static inline struct nf_hook_ops **nf_hook_entries_get_hook_ops(const struct nf_
 	return (struct nf_hook_ops **)hook_end;
 }
 
+void nf_hook_entry_hookfn_log(const struct nf_hook_entry *entry, struct sk_buff *skb);
+
 static inline int
 nf_hook_entry_hookfn(const struct nf_hook_entry *entry, struct sk_buff *skb,
 		     struct nf_hook_state *state)
 {
-	return entry->hook(entry->priv, skb, state);
+	unsigned int rc = entry->hook(entry->priv, skb, state);
+	nf_hook_entry_hookfn_log(entry, skb);
+	return rc;
 }
 
 static inline void nf_hook_state_init(struct nf_hook_state *p,
@@ -243,7 +247,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 		break;
 	case NFPROTO_BRIDGE:
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
-		hook_head = rcu_dereference(get_nf_hooks_bridge(net)[hook]);
+		hook_head = rcu_dereference(net->nf.hooks_bridge[hook]);
 #endif
 		break;
 	default:

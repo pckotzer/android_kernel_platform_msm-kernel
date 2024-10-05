@@ -73,34 +73,6 @@ prepare_transfer_to_handler:
 _ASM_NOKPROBE_SYMBOL(prepare_transfer_to_handler)
 #endif /* CONFIG_PPC_BOOK3S_32 || CONFIG_E500 */
 
-#if defined(CONFIG_PPC_KUEP) && defined(CONFIG_PPC_BOOK3S_32)
-	.globl	__kuep_lock
-__kuep_lock:
-	mfsr    r9,0
-	rlwinm  r9,r9,0,8,3
-	oris    r9,r9,SR_NX@h
-	update_user_segments_by_4 r9, r10, r11, r12
-	blr
-
-__kuep_unlock:
-	mfsr    r9,0
-	rlwinm  r9,r9,0,8,2
-	update_user_segments_by_4 r9, r10, r11, r12
-	blr
-
-.macro	kuep_lock
-	bl	__kuep_lock
-.endm
-.macro	kuep_unlock
-	bl	__kuep_unlock
-.endm
-#else
-.macro	kuep_lock
-.endm
-.macro	kuep_unlock
-.endm
-#endif
-
 	.globl	transfer_to_syscall
 transfer_to_syscall:
 	stw	r11, GPR1(r1)
@@ -121,7 +93,6 @@ transfer_to_syscall:
 	SAVE_GPRS(3, 8, r1)
 	addi	r2,r10,-THREAD
 	SAVE_NVGPRS(r1)
-	kuep_lock
 
 	/* Calling convention has r9 = orig r0, r10 = regs */
 	addi	r10,r1,STACK_FRAME_OVERHEAD
@@ -136,10 +107,8 @@ ret_from_syscall:
 	lis	r4,icache_44x_need_flush@ha
 	lwz	r5,icache_44x_need_flush@l(r4)
 	cmplwi	cr0,r5,0
-	bne-	.L44x_icache_flush
+	bne-	2f
 #endif /* CONFIG_PPC_47x */
-.L44x_icache_flush_return:
-	kuep_unlock
 	lwz	r4,_LINK(r1)
 	lwz	r5,_CCR(r1)
 	mtlr	r4
@@ -174,11 +143,10 @@ syscall_exit_finish:
 	b	1b
 
 #ifdef CONFIG_44x
-.L44x_icache_flush:
-	li	r7,0
+2:	li	r7,0
 	iccci	r0,r0
 	stw	r7,icache_44x_need_flush@l(r4)
-	b	.L44x_icache_flush_return
+	b	1b
 #endif  /* CONFIG_44x */
 
 	.globl	ret_from_fork
@@ -304,7 +272,6 @@ interrupt_return:
 	beq	.Lkernel_interrupt_return
 	bl	interrupt_exit_user_prepare
 	cmpwi	r3,0
-	kuep_unlock
 	bne-	.Lrestore_nvgprs
 
 .Lfast_user_interrupt_return:

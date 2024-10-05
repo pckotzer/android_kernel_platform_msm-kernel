@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * DaVinci CPU type detection
  *
@@ -9,7 +8,10 @@
  * compiled in to the kernel, the macros return 0 so that
  * resulting code can be optimized out.
  *
- * 2009 (c) Deep Root Systems, LLC.
+ * 2009 (c) Deep Root Systems, LLC. This file is licensed under
+ * the terms of the GNU General Public License version 2. This program
+ * is licensed "as is" without any warranty of any kind, whether express
+ * or implied.
  */
 #ifndef _ASM_ARCH_CPU_H
 #define _ASM_ARCH_CPU_H

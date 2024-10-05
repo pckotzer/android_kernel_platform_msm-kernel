@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #define pr_fmt(fmt) "synx: " fmt
 
@@ -302,9 +302,12 @@ int synx_signal_core(struct synx_coredata *synx_obj,
 		ret = bind_ops->deregister_callback(
 				synx_external_callback, data, sync_id);
 		if (ret < 0) {
-			pr_err("deregistration fail on %d, type: %u, err: %d\n",
-				sync_id, type, ret);
+			pr_err("deregistration fail %d err %d status %d h_synx %d\n",
+				sync_id, ret, status, data->h_synx);
 			continue;
+		} else {
+			pr_debug("deregistered: data: %u sync_id: %d\n",
+				data, sync_id);
 		}
 		pr_debug("signal external sync: %d, type: %u, status: %u\n",
 			sync_id, type, status);
@@ -484,8 +487,8 @@ int synx_signal(struct synx_session session_id, s32 h_synx, u32 status)
 fail:
 	synx_util_release_handle(synx_data);
 	synx_put_client(client);
-	pr_debug("[sess: %u] exit signal with status %d\n",
-		session_id.client_id, rc);
+	pr_debug("[sess: %u] signal h_synx %d status %u return %d\n",
+		session_id.client_id, h_synx, status, rc);
 	return rc;
 }
 EXPORT_SYMBOL(synx_signal);
@@ -819,8 +822,8 @@ int synx_release(struct synx_session session_id, s32 h_synx)
 	mutex_unlock(&client->synx_table_lock[idx]);
 
 	synx_put_client(client);
-	pr_debug("[sess: %u] exit release with status %d\n",
-		session_id.client_id, rc);
+	pr_debug("[sess: %u] released handle %d returning %d\n",
+		session_id.client_id, h_synx, rc);
 
 	return rc;
 }
@@ -853,8 +856,8 @@ int synx_wait(struct synx_session session_id, s32 h_synx, u64 timeout_ms)
 	timeleft = dma_fence_wait_timeout(synx_obj->fence, (bool) 0,
 					msecs_to_jiffies(timeout_ms));
 	if (timeleft <= 0) {
-		pr_err("[sess: %u] wait timeout for handle %d\n",
-			client->id, h_synx);
+		pr_err("[sess: %u] wait timeout for handle %d timeout %ld\n",
+			client->id, h_synx, timeout_ms);
 		rc = -ETIMEDOUT;
 		goto fail;
 	}
@@ -1001,8 +1004,8 @@ int synx_bind(struct synx_session session_id,
 
 	synx_util_release_handle(synx_data);
 	synx_put_client(client);
-	pr_debug("[sess: %u] bind of handle %d with id %d successful\n",
-		session_id.client_id, h_synx, external_sync.id[0]);
+	pr_debug("[sess: %u] bind of handle %d with id %d data %u successful\n",
+		session_id.client_id, h_synx, external_sync.id[0], data);
 	return 0;
 
 free:
@@ -1010,6 +1013,8 @@ free:
 release:
 	mutex_unlock(&synx_obj->obj_lock);
 fail:
+	pr_err("[sess: %u] bind returning err %d extid %d h_synx %d\n",
+		session_id.client_id, rc, external_sync.id[0], h_synx);
 	synx_util_release_handle(synx_data);
 	synx_put_client(client);
 	return rc;
@@ -1152,8 +1157,8 @@ int synx_import(struct synx_session session_id,
 	}
 
 	*params->new_h_synx = h_synx;
-	pr_debug("[sess: %u] new import obj with handle %ld, fence %pK\n",
-		client->id, h_synx, synx_obj);
+	pr_debug("[sess: %u] import: h_synx %d new_h_synx %d, fence %pK\n",
+		client->id, params->h_synx, h_synx, synx_obj);
 	synx_put_client(client);
 
 	return 0;
@@ -1618,7 +1623,6 @@ static ssize_t synx_read(struct file *filep,
 
 	list_del_init(&cb->node);
 	mutex_unlock(&client->event_q_lock);
-	memset(&data, 0, sizeof(struct synx_userpayload_info));
 
 	rc = size;
 	data.synx_obj = cb->kernel_cb.h_synx;

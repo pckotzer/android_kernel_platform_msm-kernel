@@ -230,26 +230,24 @@ static int announce_servers(struct sockaddr_qrtr *sq)
 	struct qrtr_server *srv;
 	struct qrtr_node *node;
 	unsigned long index;
-	unsigned long node_idx;
 	int ret;
 
-	/* Announce the list of servers registered in this node */
-	xa_for_each(&nodes, node_idx, node) {
-		if (node->id == sq->sq_node) {
-			pr_info("Avoiding duplicate announce for NODE ID %u\n", node->id);
-			continue;
-		}
-		xa_for_each(&node->servers, index, srv) {
-			ret = service_announce_new(sq, srv);
-			if (ret < 0) {
-				if (ret == -ENODEV)
-					continue;
+	node = node_get(qrtr_ns.local_node);
+	if (!node)
+		return 0;
 
-				pr_err("failed to announce new service %d\n", ret);
-				return ret;
-			}
+	/* Announce the list of servers registered in this node */
+	xa_for_each(&node->servers, index, srv) {
+		ret = service_announce_new(sq, srv);
+		if (ret < 0) {
+			if (ret == -ENODEV)
+				continue;
+
+			pr_err("failed to announce new service %d\n", ret);
+			return ret;
 		}
 	}
+
 	return 0;
 }
 
@@ -552,9 +550,7 @@ static int ctrl_cmd_del_server(struct sockaddr_qrtr *from,
 	if (!node)
 		return -ENOENT;
 
-	server_del(node, port, true);
-
-	return 0;
+	return server_del(node, port, true);
 }
 
 static int ctrl_cmd_new_lookup(struct sockaddr_qrtr *from,

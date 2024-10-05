@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include "hab_grantable.h"
-#include "hab_trace_os.h"
 
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
@@ -235,8 +234,6 @@ static void hab_msg_queue(struct virtual_channel *vchan,
 	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
 	list_add_tail(&message->node, &vchan->rx_list);
 	hab_spin_unlock(&vchan->rx_lock, irqs_disabled);
-
-	trace_hab_pchan_recv_wakeup(vchan->pchan);
 
 	wake_up(&vchan->rx_queue);
 }
@@ -617,8 +614,7 @@ static void hab_recv_unimport_msg(struct physical_channel *pchan, int vchan_exis
 
 static int hab_try_get_vchan(struct physical_channel *pchan,
 				struct hab_header *header,
-				struct virtual_channel **vchan_out,
-				int *need_ret)
+				struct virtual_channel **vchan_out)
 {
 	struct virtual_channel *vchan = NULL;
 	size_t sizebytes = HAB_HEADER_GET_SIZE(*header);
@@ -648,7 +644,6 @@ static int hab_try_get_vchan(struct physical_channel *pchan,
 		 */
 		vchan = hab_vchan_get(pchan, header);
 		if (!vchan) {
-			*need_ret = 1;
 			pr_debug("vchan not found type %d vcid %x sz %zx sesn %d\n",
 				payload_type, vchan_id, sizebytes, session_id);
 
@@ -666,7 +661,6 @@ static int hab_try_get_vchan(struct physical_channel *pchan,
 			}
 			return -EINVAL;
 		} else if (vchan->otherend_closed) {
-			*need_ret = 1;
 			hab_vchan_put(vchan);
 			pr_info("vchan remote closed type %d, vchan id %x, sizebytes %zx, session %d\n",
 				payload_type, vchan_id,
@@ -681,7 +675,6 @@ static int hab_try_get_vchan(struct physical_channel *pchan,
 		}
 	} else {
 		if (sizebytes != sizeof(struct hab_open_send_data)) {
-			*need_ret = 1;
 			pr_err("%s Invalid open req type %d vcid %x bytes %zx session %d\n",
 				pchan->name, payload_type, vchan_id,
 				sizebytes, session_id);
@@ -719,10 +712,9 @@ int hab_msg_recv(struct physical_channel *pchan,
 	int found = 0;
 	struct hab_import_data imp_data = {0};
 	int irqs_disabled = irqs_disabled();
-	int need_ret = 0;
 
-	ret = hab_try_get_vchan(pchan, header, &vchan, &need_ret);
-	if (need_ret)
+	ret = hab_try_get_vchan(pchan, header, &vchan);
+	if (ret != 0 || ((vchan == NULL) && (payload_type == HAB_PAYLOAD_TYPE_UNIMPORT)))
 		return ret;
 
 	switch (payload_type) {
@@ -745,7 +737,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 				pchan->name, ret, payload_type, sizebytes);
 			break;
 		}
-		wake_up(&dev->openq);
+		wake_up_interruptible(&dev->openq);
 		break;
 
 	case HAB_PAYLOAD_TYPE_INIT_CANCEL:

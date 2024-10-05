@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Copyright (c) 2019, 2020, Linaro Ltd.
- * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -19,10 +19,24 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/thermal.h>
-#include <linux/suspend.h>
 #include <linux/thermal_minidump.h>
 #include "tsens.h"
 #include "thermal_zone_internal.h"
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+#define MAX_TSENS0_TS	16
+
+static struct delayed_work ts_print_work;
+struct tsens_priv *ts_priv0;
+struct tsens_priv *ts_priv1;
+struct tsens_priv *ts_priv2;
+
+/* TODO: optimize the # of tsens pring, now for bring up  debugging */
+static int ts_print_num0[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static int ts_print_num1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static int ts_print_num2[] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+static int ts_print_count;
+#endif
 
 /**
  * struct tsens_irq_data - IRQ status and temperature violations
@@ -1087,6 +1101,51 @@ static int tsens_tz_change_mode(void *data, enum thermal_device_mode mode)
 	return qti_tz_change_mode(s->tzd, mode);
 }
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+static void __ref ts_print(struct work_struct *work)
+{
+	struct tsens_sensor *ts_sensor;
+	int temp = 0;
+	size_t i;
+	int added = 0, ret = 0;
+	char buffer[500] = { 0, };
+
+	ret = snprintf(buffer + added, sizeof(buffer) - added, "tsens");
+	added += ret;
+
+	/* print tsens0 */
+	for (i = 0; i < (sizeof(ts_print_num0) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv0->sensor[ts_print_num0[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+				   "[%d:%d]", ts_print_num0[i], temp / 100);
+		added += ret;
+	}
+
+	/* print tsens1 */
+	for (i = 0; i < (sizeof(ts_print_num1) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv1->sensor[ts_print_num1[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num1[i] + MAX_TSENS0_TS, temp / 100);
+		added += ret;
+	}
+
+	/* print tsens2 */
+	for (i = 0; i < (sizeof(ts_print_num2) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv2->sensor[ts_print_num2[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num1[i] + MAX_TSENS0_TS + MAX_TSENS0_TS, temp / 100);
+		added += ret;
+	}
+
+	pr_info("%s: %s\n", __func__, buffer);
+
+	schedule_delayed_work(&ts_print_work, HZ * 5);
+}
+#endif
+
 static int  __maybe_unused tsens_suspend(struct device *dev)
 {
 	struct tsens_priv *priv = dev_get_drvdata(dev);
@@ -1161,7 +1220,7 @@ static const struct thermal_zone_of_device_ops tsens_cold_of_ops = {
 
 
 static int tsens_register_irq(struct tsens_priv *priv, char *irqname,
-			      irq_handler_t thread_fn, int *irq_num)
+			      irq_handler_t thread_fn)
 {
 	struct platform_device *pdev;
 	int ret, irq;
@@ -1171,7 +1230,6 @@ static int tsens_register_irq(struct tsens_priv *priv, char *irqname,
 		return -ENODEV;
 
 	irq = platform_get_irq_byname(pdev, irqname);
-	*irq_num = irq;
 	if (irq < 0) {
 		ret = irq;
 		/* For old DTs with no IRQ defined */
@@ -1200,73 +1258,6 @@ static int tsens_register_irq(struct tsens_priv *priv, char *irqname,
 
 	put_device(&pdev->dev);
 	return ret;
-}
-
-static int tsens_reinit(struct tsens_priv *priv)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&priv->ul_lock, flags);
-
-	if (priv->feat->has_watchdog) {
-		regmap_field_write(priv->rf[WDOG_BARK_MASK], 0);
-		regmap_field_write(priv->rf[CC_MON_MASK], 1);
-	}
-
-	if (tsens_version(priv) >= VER_0_1)
-		tsens_enable_irq(priv);
-
-	spin_unlock_irqrestore(&priv->ul_lock, flags);
-
-	return 0;
-}
-
-int tsens_v2_tsens_suspend(struct tsens_priv *priv)
-{
-	if (!pm_suspend_via_firmware() && !priv->tm_disable_on_suspend)
-		return 0;
-
-	if (priv->uplow_irq > 0) {
-		disable_irq_nosync(priv->uplow_irq);
-		disable_irq_wake(priv->uplow_irq);
-	}
-
-	if (priv->feat->crit_int && priv->crit_irq > 0) {
-		disable_irq_nosync(priv->crit_irq);
-		disable_irq_wake(priv->crit_irq);
-	}
-
-	if (pm_suspend_via_firmware() && priv->cold_irq > 0) {
-		disable_irq_nosync(priv->cold_irq);
-		disable_irq_wake(priv->cold_irq);
-	}
-	return 0;
-}
-
-int tsens_v2_tsens_resume(struct tsens_priv *priv)
-{
-	if (!pm_suspend_via_firmware() && !priv->tm_disable_on_suspend)
-		return 0;
-
-	if (pm_suspend_via_firmware())
-		tsens_reinit(priv);
-
-	if (priv->uplow_irq > 0) {
-		enable_irq(priv->uplow_irq);
-		enable_irq_wake(priv->uplow_irq);
-	}
-
-	if (priv->feat->crit_int && priv->crit_irq > 0) {
-		enable_irq(priv->crit_irq);
-		enable_irq_wake(priv->crit_irq);
-	}
-
-	if (pm_suspend_via_firmware() && priv->cold_irq > 0) {
-		enable_irq(priv->cold_irq);
-		enable_irq_wake(priv->cold_irq);
-	}
-
-	return 0;
 }
 
 static int tsens_register(struct tsens_priv *priv)
@@ -1311,15 +1302,14 @@ static int tsens_register(struct tsens_priv *priv)
 				   tsens_mC_to_hw(priv->sensor, 0));
 	}
 
-	ret = tsens_register_irq(priv, "uplow", tsens_irq_thread,
-					&priv->uplow_irq);
+	ret = tsens_register_irq(priv, "uplow", tsens_irq_thread);
 
 	if (ret < 0)
 		return ret;
 
 	if (priv->feat->crit_int)
 		ret = tsens_register_irq(priv, "critical",
-					 tsens_critical_irq_thread, &priv->crit_irq);
+					 tsens_critical_irq_thread);
 
 	if (priv->feat->cold_int) {
 		priv->cold_sensor = devm_kzalloc(priv->dev,
@@ -1334,11 +1324,13 @@ static int tsens_register(struct tsens_priv *priv)
 					priv->cold_sensor->hw_id,
 					priv->cold_sensor,
 					&tsens_cold_of_ops);
-		if (!IS_ERR_OR_NULL(tzd)) {
-			priv->cold_sensor->tzd = tzd;
-			ret = tsens_register_irq(priv, "cold",
-					tsens_cold_irq_thread, &priv->cold_irq);
+		if (IS_ERR(tzd)) {
+			ret = 0;
+			return ret;
 		}
+
+		priv->cold_sensor->tzd = tzd;
+		ret = tsens_register_irq(priv, "cold", tsens_cold_irq_thread);
 	}
 	return ret;
 }
@@ -1416,15 +1408,41 @@ static int tsens_probe(struct platform_device *pdev)
 	}
 
 	priv->tsens_md = thermal_minidump_register(np->name);
-	priv->tm_disable_on_suspend =
-				of_property_read_bool(np, "tm-disable-on-suspend");
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	ret = tsens_register(priv);
+
+	if (!strncmp(pdev->name, "c271000", 7)) {
+		pr_info("%s: ts_priv0\n", __func__);
+		ts_priv0 = priv;
+	} else if (!strncmp(pdev->name, "c272000", 7)) {
+		pr_info("%s: ts_priv1\n", __func__);
+		ts_priv1 = priv;
+	} else if (!strncmp(pdev->name, "c273000", 7)) {
+		pr_info("%s: ts_priv2\n", __func__);
+		ts_priv2 = priv;
+	}
+
+	if (ts_print_count == 0 && ts_priv2 != NULL) {
+		pr_info("%s: set schedule work\n", __func__);
+		INIT_DELAYED_WORK(&ts_print_work, ts_print);
+		schedule_delayed_work(&ts_print_work, 0);
+		ts_print_count++;
+	}
+
+	return ret;
+#else
 	return tsens_register(priv);
+#endif
 }
 
 static int tsens_remove(struct platform_device *pdev)
 {
 	struct tsens_priv *priv = platform_get_drvdata(pdev);
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	cancel_delayed_work_sync(&ts_print_work);
+#endif
 
 	debugfs_remove_recursive(priv->debug_root);
 	tsens_disable_irq(priv);

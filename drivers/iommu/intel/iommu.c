@@ -3564,6 +3564,13 @@ static int iommu_suspend(void)
 	struct intel_iommu *iommu = NULL;
 	unsigned long flag;
 
+	for_each_active_iommu(iommu, drhd) {
+		iommu->iommu_state = kcalloc(MAX_SR_DMAR_REGS, sizeof(u32),
+					     GFP_KERNEL);
+		if (!iommu->iommu_state)
+			goto nomem;
+	}
+
 	iommu_flush_all();
 
 	for_each_active_iommu(iommu, drhd) {
@@ -3583,6 +3590,12 @@ static int iommu_suspend(void)
 		raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 	}
 	return 0;
+
+nomem:
+	for_each_active_iommu(iommu, drhd)
+		kfree(iommu->iommu_state);
+
+	return -ENOMEM;
 }
 
 static void iommu_resume(void)
@@ -3614,6 +3627,9 @@ static void iommu_resume(void)
 
 		raw_spin_unlock_irqrestore(&iommu->register_lock, flag);
 	}
+
+	for_each_active_iommu(iommu, drhd)
+		kfree(iommu->iommu_state);
 }
 
 static struct syscore_ops iommu_syscore_ops = {
@@ -4465,8 +4481,8 @@ static int domain_context_clear_one_cb(struct pci_dev *pdev, u16 alias, void *op
  */
 static void domain_context_clear(struct device_domain_info *info)
 {
-	if (!dev_is_pci(info->dev))
-		domain_context_clear_one(info, info->bus, info->devfn);
+	if (!info->iommu || !info->dev || !dev_is_pci(info->dev))
+		return;
 
 	pci_for_each_dma_alias(to_pci_dev(info->dev),
 			       &domain_context_clear_one_cb, info);
@@ -5749,7 +5765,7 @@ static void quirk_igfx_skip_te_disable(struct pci_dev *dev)
 	ver = (dev->device >> 8) & 0xff;
 	if (ver != 0x45 && ver != 0x46 && ver != 0x4c &&
 	    ver != 0x4e && ver != 0x8a && ver != 0x98 &&
-	    ver != 0x9a && ver != 0xa7 && ver != 0x7d)
+	    ver != 0x9a && ver != 0xa7)
 		return;
 
 	if (risky_device(dev))

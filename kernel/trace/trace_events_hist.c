@@ -436,6 +436,10 @@ DEFINE_HIST_FIELD_FN(u8);
 #define for_each_hist_key_field(i, hist_data)	\
 	for ((i) = (hist_data)->n_vals; (i) < (hist_data)->n_fields; (i)++)
 
+#define HIST_STACKTRACE_DEPTH	16
+#define HIST_STACKTRACE_SIZE	(HIST_STACKTRACE_DEPTH * sizeof(unsigned long))
+#define HIST_STACKTRACE_SKIP	5
+
 #define HITCOUNT_IDX		0
 #define HIST_KEY_SIZE_MAX	(MAX_FILTER_STR_VAL + HIST_STACKTRACE_SIZE)
 
@@ -3765,9 +3769,6 @@ static int check_synth_field(struct synth_event *event,
 	    && field->is_dynamic)
 		return 0;
 
-	if (strstr(hist_field->type, "long[") && field->is_stack)
-		return 0;
-
 	if (strcmp(field->type, hist_field->type) != 0) {
 		if (field->size != hist_field->size ||
 		    (!field->is_string && field->is_signed != hist_field->is_signed))
@@ -5284,12 +5285,10 @@ static int event_hist_open(struct inode *inode, struct file *file)
 {
 	int ret;
 
-	ret = tracing_open_file_tr(inode, file);
+	ret = security_locked_down(LOCKDOWN_TRACEFS);
 	if (ret)
 		return ret;
 
-	/* Clear private_data to avoid warning in single_open() */
-	file->private_data = NULL;
 	return single_open(file, hist_show, file);
 }
 
@@ -5297,7 +5296,7 @@ const struct file_operations event_hist_fops = {
 	.open = event_hist_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = tracing_single_release_file_tr,
+	.release = single_release,
 };
 
 #ifdef CONFIG_HIST_TRIGGERS_DEBUG
@@ -5563,12 +5562,10 @@ static int event_hist_debug_open(struct inode *inode, struct file *file)
 {
 	int ret;
 
-	ret = tracing_open_file_tr(inode, file);
+	ret = security_locked_down(LOCKDOWN_TRACEFS);
 	if (ret)
 		return ret;
 
-	/* Clear private_data to avoid warning in single_open() */
-	file->private_data = NULL;
 	return single_open(file, hist_debug_show, file);
 }
 
@@ -5576,7 +5573,7 @@ const struct file_operations event_hist_debug_fops = {
 	.open = event_hist_debug_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = tracing_single_release_file_tr,
+	.release = single_release,
 };
 #endif
 

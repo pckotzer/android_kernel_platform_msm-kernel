@@ -1125,7 +1125,7 @@ free_buf:
 
 static int snd_usb_motu_m_series_boot_quirk(struct usb_device *dev)
 {
-	msleep(4000);
+	msleep(2000);
 
 	return 0;
 }
@@ -1364,7 +1364,7 @@ int snd_usb_apply_boot_quirk_once(struct usb_device *dev,
 				  unsigned int id)
 {
 	switch (id) {
-	case USB_ID(0x07fd, 0x0008): /* MOTU M Series, 1st hardware version */
+	case USB_ID(0x07fd, 0x0008): /* MOTU M Series */
 		return snd_usb_motu_m_series_boot_quirk(dev);
 	}
 
@@ -1725,11 +1725,7 @@ void snd_usb_audioformat_attributes_quirk(struct snd_usb_audio *chip,
 		/* mic works only when ep packet size is set to wMaxPacketSize */
 		fp->attributes |= UAC_EP_CS_ATTR_FILL_MAX;
 		break;
-	case USB_ID(0x3511, 0x2b1e): /* Opencomm2 UC USB Bluetooth dongle */
-		/* mic works only when ep pitch control is not set */
-		if (stream == SNDRV_PCM_STREAM_CAPTURE)
-			fp->attributes &= ~UAC_EP_CS_ATTR_PITCH_CONTROL;
-		break;
+
 	}
 }
 
@@ -1975,6 +1971,10 @@ static const struct usb_audio_quirk_flags_table quirk_flags_table[] = {
 		   QUIRK_FLAG_DSD_RAW),
 	VENDOR_FLG(0xc502, /* HiBy devices */
 		   QUIRK_FLAG_DSD_RAW),
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	VENDOR_FLG(0x04e8, /* Samsung */
+		   QUIRK_FLAG_CTL_MSG_DELAY_1M),
+#endif
 
 	{} /* terminator */
 };
@@ -1987,7 +1987,7 @@ void snd_usb_init_quirk_flags(struct snd_usb_audio *chip)
 		if (chip->usb_id == p->id ||
 		    (!USB_ID_PRODUCT(p->id) &&
 		     USB_ID_VENDOR(chip->usb_id) == USB_ID_VENDOR(p->id))) {
-			usb_audio_dbg(chip,
+			usb_audio_info(chip,
 				      "Set quirk_flags 0x%x for device %04x:%04x\n",
 				      p->flags, USB_ID_VENDOR(chip->usb_id),
 				      USB_ID_PRODUCT(chip->usb_id));

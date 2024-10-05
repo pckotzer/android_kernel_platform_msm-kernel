@@ -98,7 +98,10 @@ int rpmsg_release_channel(struct rpmsg_device *rpdev,
  */
 static inline int rpmsg_ctrldev_register_device(struct rpmsg_device *rpdev)
 {
-	return rpmsg_register_device_override(rpdev, "rpmsg_ctrl");
+	strcpy(rpdev->id.name, "rpmsg_ctrl");
+	rpdev->driver_override = "rpmsg_ctrl";
+
+	return rpmsg_register_device(rpdev);
 }
 
 #endif

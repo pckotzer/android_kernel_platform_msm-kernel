@@ -13,7 +13,6 @@
 #include <linux/interconnect.h>
 #include <linux/interconnect-provider.h>
 #include <linux/list.h>
-#include <linux/sched/mm.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
@@ -380,9 +379,6 @@ struct icc_node_data *of_icc_get_from_provider(struct of_phandle_args *spec)
 		}
 	}
 	mutex_unlock(&icc_lock);
-
-	if (!node)
-		return ERR_PTR(-EINVAL);
 
 	if (IS_ERR(node))
 		return ERR_CAST(node);

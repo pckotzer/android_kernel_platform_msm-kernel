@@ -192,38 +192,11 @@ static void pcie_clkpm_cap_init(struct pcie_link_state *link, int blacklist)
 	link->clkpm_disable = blacklist ? 1 : 0;
 }
 
-static int pcie_wait_for_retrain(struct pci_dev *pdev)
-{
-	unsigned long end_jiffies;
-	u16 reg16;
-
-	/* Wait for Link Training to be cleared by hardware */
-	end_jiffies = jiffies + LINK_RETRAIN_TIMEOUT;
-	do {
-		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &reg16);
-		if (!(reg16 & PCI_EXP_LNKSTA_LT))
-			return 0;
-		msleep(1);
-	} while (time_before(jiffies, end_jiffies));
-
-	return -ETIMEDOUT;
-}
-
-static int pcie_retrain_link(struct pcie_link_state *link)
+static bool pcie_retrain_link(struct pcie_link_state *link)
 {
 	struct pci_dev *parent = link->pdev;
-	int rc;
+	unsigned long end_jiffies;
 	u16 reg16;
-
-	/*
-	 * Ensure the updated LNKCTL parameters are used during link
-	 * training by checking that there is no ongoing link training to
-	 * avoid LTSSM race as recommended in Implementation Note at the
-	 * end of PCIe r6.0.1 sec 7.5.3.7.
-	 */
-	rc = pcie_wait_for_retrain(parent);
-	if (rc)
-		return rc;
 
 	pcie_capability_read_word(parent, PCI_EXP_LNKCTL, &reg16);
 	reg16 |= PCI_EXP_LNKCTL_RL;
@@ -238,7 +211,15 @@ static int pcie_retrain_link(struct pcie_link_state *link)
 		pcie_capability_write_word(parent, PCI_EXP_LNKCTL, reg16);
 	}
 
-	return pcie_wait_for_retrain(parent);
+	/* Wait for link training end. Break out after waiting for timeout */
+	end_jiffies = jiffies + LINK_RETRAIN_TIMEOUT;
+	do {
+		pcie_capability_read_word(parent, PCI_EXP_LNKSTA, &reg16);
+		if (!(reg16 & PCI_EXP_LNKSTA_LT))
+			break;
+		msleep(1);
+	} while (time_before(jiffies, end_jiffies));
+	return !(reg16 & PCI_EXP_LNKSTA_LT);
 }
 
 /*
@@ -249,7 +230,7 @@ static int pcie_retrain_link(struct pcie_link_state *link)
 static void pcie_aspm_configure_common_clock(struct pcie_link_state *link)
 {
 	int same_clock = 1;
-	u16 reg16, ccc, parent_old_ccc, child_old_ccc[8];
+	u16 reg16, parent_reg, child_reg[8];
 	struct pci_dev *child, *parent = link->pdev;
 	struct pci_bus *linkbus = parent->subordinate;
 	/*
@@ -271,7 +252,6 @@ static void pcie_aspm_configure_common_clock(struct pcie_link_state *link)
 
 	/* Port might be already in common clock mode */
 	pcie_capability_read_word(parent, PCI_EXP_LNKCTL, &reg16);
-	parent_old_ccc = reg16 & PCI_EXP_LNKCTL_CCC;
 	if (same_clock && (reg16 & PCI_EXP_LNKCTL_CCC)) {
 		bool consistent = true;
 
@@ -288,30 +268,35 @@ static void pcie_aspm_configure_common_clock(struct pcie_link_state *link)
 		pci_info(parent, "ASPM: current common clock configuration is inconsistent, reconfiguring\n");
 	}
 
-	ccc = same_clock ? PCI_EXP_LNKCTL_CCC : 0;
 	/* Configure downstream component, all functions */
 	list_for_each_entry(child, &linkbus->devices, bus_list) {
 		pcie_capability_read_word(child, PCI_EXP_LNKCTL, &reg16);
-		child_old_ccc[PCI_FUNC(child->devfn)] = reg16 & PCI_EXP_LNKCTL_CCC;
-		pcie_capability_clear_and_set_word(child, PCI_EXP_LNKCTL,
-						   PCI_EXP_LNKCTL_CCC, ccc);
+		child_reg[PCI_FUNC(child->devfn)] = reg16;
+		if (same_clock)
+			reg16 |= PCI_EXP_LNKCTL_CCC;
+		else
+			reg16 &= ~PCI_EXP_LNKCTL_CCC;
+		pcie_capability_write_word(child, PCI_EXP_LNKCTL, reg16);
 	}
 
 	/* Configure upstream component */
-	pcie_capability_clear_and_set_word(parent, PCI_EXP_LNKCTL,
-					   PCI_EXP_LNKCTL_CCC, ccc);
+	pcie_capability_read_word(parent, PCI_EXP_LNKCTL, &reg16);
+	parent_reg = reg16;
+	if (same_clock)
+		reg16 |= PCI_EXP_LNKCTL_CCC;
+	else
+		reg16 &= ~PCI_EXP_LNKCTL_CCC;
+	pcie_capability_write_word(parent, PCI_EXP_LNKCTL, reg16);
 
-	if (pcie_retrain_link(link)) {
+	if (pcie_retrain_link(link))
+		return;
 
-		/* Training failed. Restore common clock configurations */
-		pci_err(parent, "ASPM: Could not configure common clock\n");
-		list_for_each_entry(child, &linkbus->devices, bus_list)
-			pcie_capability_clear_and_set_word(child, PCI_EXP_LNKCTL,
-							   PCI_EXP_LNKCTL_CCC,
-							   child_old_ccc[PCI_FUNC(child->devfn)]);
-		pcie_capability_clear_and_set_word(parent, PCI_EXP_LNKCTL,
-						   PCI_EXP_LNKCTL_CCC, parent_old_ccc);
-	}
+	/* Training failed. Restore common clock configurations */
+	pci_err(parent, "ASPM: Could not configure common clock\n");
+	list_for_each_entry(child, &linkbus->devices, bus_list)
+		pcie_capability_write_word(child, PCI_EXP_LNKCTL,
+					   child_reg[PCI_FUNC(child->devfn)]);
+	pcie_capability_write_word(parent, PCI_EXP_LNKCTL, parent_reg);
 }
 
 /* Convert L0s latency encoding to ns */
@@ -1038,25 +1023,6 @@ void pcie_aspm_exit_link_state(struct pci_dev *pdev)
 	up_read(&pci_bus_sem);
 }
 
-/* @pdev: the root port or switch downstream port */
-void pcie_aspm_pm_state_change(struct pci_dev *pdev)
-{
-	struct pcie_link_state *link = pdev->link_state;
-
-	if (aspm_disabled || !link)
-		return;
-	/*
-	 * Devices changed PM state, we should recheck if latency
-	 * meets all functions' requirement
-	 */
-	down_read(&pci_bus_sem);
-	mutex_lock(&aspm_lock);
-	pcie_update_aspm_capable(link->root);
-	pcie_config_aspm_path(link);
-	mutex_unlock(&aspm_lock);
-	up_read(&pci_bus_sem);
-}
-
 void pcie_aspm_powersave_config_link(struct pci_dev *pdev)
 {
 	struct pcie_link_state *link = pdev->link_state;
@@ -1250,8 +1216,6 @@ static ssize_t aspm_attr_store_common(struct device *dev,
 			link->aspm_disable &= ~ASPM_STATE_L1;
 	} else {
 		link->aspm_disable |= state;
-		if (state & ASPM_STATE_L1)
-			link->aspm_disable |= ASPM_STATE_L1SS;
 	}
 
 	pcie_config_aspm_link(link, policy_to_aspm_state(link));

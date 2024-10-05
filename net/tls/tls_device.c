@@ -45,13 +45,13 @@
  */
 static DECLARE_RWSEM(device_offload_lock);
 
-static struct workqueue_struct *destruct_wq __read_mostly;
+static void tls_device_gc_task(struct work_struct *work);
 
+static DECLARE_WORK(tls_device_gc_work, tls_device_gc_task);
+static LIST_HEAD(tls_device_gc_list);
 static LIST_HEAD(tls_device_list);
 static LIST_HEAD(tls_device_down_list);
 static DEFINE_SPINLOCK(tls_device_lock);
-
-static struct page *dummy_page;
 
 static void tls_device_free_ctx(struct tls_context *ctx)
 {
@@ -67,44 +67,47 @@ static void tls_device_free_ctx(struct tls_context *ctx)
 	tls_ctx_free(NULL, ctx);
 }
 
-static void tls_device_tx_del_task(struct work_struct *work)
+static void tls_device_gc_task(struct work_struct *work)
 {
-	struct tls_offload_context_tx *offload_ctx =
-		container_of(work, struct tls_offload_context_tx, destruct_work);
-	struct tls_context *ctx = offload_ctx->ctx;
-	struct net_device *netdev = ctx->netdev;
+	struct tls_context *ctx, *tmp;
+	unsigned long flags;
+	LIST_HEAD(gc_list);
 
-	netdev->tlsdev_ops->tls_dev_del(netdev, ctx, TLS_OFFLOAD_CTX_DIR_TX);
-	dev_put(netdev);
-	ctx->netdev = NULL;
-	tls_device_free_ctx(ctx);
+	spin_lock_irqsave(&tls_device_lock, flags);
+	list_splice_init(&tls_device_gc_list, &gc_list);
+	spin_unlock_irqrestore(&tls_device_lock, flags);
+
+	list_for_each_entry_safe(ctx, tmp, &gc_list, list) {
+		struct net_device *netdev = ctx->netdev;
+
+		if (netdev && ctx->tx_conf == TLS_HW) {
+			netdev->tlsdev_ops->tls_dev_del(netdev, ctx,
+							TLS_OFFLOAD_CTX_DIR_TX);
+			dev_put(netdev);
+			ctx->netdev = NULL;
+		}
+
+		list_del(&ctx->list);
+		tls_device_free_ctx(ctx);
+	}
 }
 
 static void tls_device_queue_ctx_destruction(struct tls_context *ctx)
 {
 	unsigned long flags;
-	bool async_cleanup;
 
 	spin_lock_irqsave(&tls_device_lock, flags);
-	if (unlikely(!refcount_dec_and_test(&ctx->refcount))) {
-		spin_unlock_irqrestore(&tls_device_lock, flags);
-		return;
-	}
+	if (unlikely(!refcount_dec_and_test(&ctx->refcount)))
+		goto unlock;
 
-	list_del(&ctx->list); /* Remove from tls_device_list / tls_device_down_list */
-	async_cleanup = ctx->netdev && ctx->tx_conf == TLS_HW;
-	if (async_cleanup) {
-		struct tls_offload_context_tx *offload_ctx = tls_offload_ctx_tx(ctx);
+	list_move_tail(&ctx->list, &tls_device_gc_list);
 
-		/* queue_work inside the spinlock
-		 * to make sure tls_device_down waits for that work.
-		 */
-		queue_work(destruct_wq, &offload_ctx->destruct_work);
-	}
+	/* schedule_work inside the spinlock
+	 * to make sure tls_device_down waits for that work.
+	 */
+	schedule_work(&tls_device_gc_work);
+unlock:
 	spin_unlock_irqrestore(&tls_device_lock, flags);
-
-	if (!async_cleanup)
-		tls_device_free_ctx(ctx);
 }
 
 /* We assume that the socket is already connected */
@@ -299,33 +302,36 @@ static int tls_push_record(struct sock *sk,
 	return tls_push_sg(sk, ctx, offload_ctx->sg_tx_data, 0, flags);
 }
 
-static void tls_device_record_close(struct sock *sk,
-				    struct tls_context *ctx,
-				    struct tls_record_info *record,
-				    struct page_frag *pfrag,
-				    unsigned char record_type)
+static int tls_device_record_close(struct sock *sk,
+				   struct tls_context *ctx,
+				   struct tls_record_info *record,
+				   struct page_frag *pfrag,
+				   unsigned char record_type)
 {
 	struct tls_prot_info *prot = &ctx->prot_info;
-	struct page_frag dummy_tag_frag;
+	int ret;
 
 	/* append tag
 	 * device will fill in the tag, we just need to append a placeholder
 	 * use socket memory to improve coalescing (re-using a single buffer
 	 * increases frag count)
-	 * if we can't allocate memory now use the dummy page
+	 * if we can't allocate memory now, steal some back from data
 	 */
-	if (unlikely(pfrag->size - pfrag->offset < prot->tag_size) &&
-	    !skb_page_frag_refill(prot->tag_size, pfrag, sk->sk_allocation)) {
-		dummy_tag_frag.page = dummy_page;
-		dummy_tag_frag.offset = 0;
-		pfrag = &dummy_tag_frag;
+	if (likely(skb_page_frag_refill(prot->tag_size, pfrag,
+					sk->sk_allocation))) {
+		ret = 0;
+		tls_append_frag(record, pfrag, prot->tag_size);
+	} else {
+		ret = prot->tag_size;
+		if (record->len <= prot->overhead_size)
+			return -ENOMEM;
 	}
-	tls_append_frag(record, pfrag, prot->tag_size);
 
 	/* fill prepend */
 	tls_fill_prepend(ctx, skb_frag_address(&record->frags[0]),
 			 record->len - prot->overhead_size,
 			 record_type);
+	return ret;
 }
 
 static int tls_create_new_record(struct tls_offload_context_tx *offload_ctx,
@@ -501,8 +507,18 @@ last_record:
 
 		if (done || record->len >= max_open_record_len ||
 		    (record->num_frags >= MAX_SKB_FRAGS - 1)) {
-			tls_device_record_close(sk, tls_ctx, record,
-						pfrag, record_type);
+			rc = tls_device_record_close(sk, tls_ctx, record,
+						     pfrag, record_type);
+			if (rc) {
+				if (rc > 0) {
+					size += rc;
+				} else {
+					size = orig_size;
+					destroy_record(record);
+					ctx->open_record = NULL;
+					break;
+				}
+			}
 
 			rc = tls_push_record(sk,
 					     tls_ctx,
@@ -1089,9 +1105,6 @@ int tls_set_device_offload(struct sock *sk, struct tls_context *ctx)
 	start_marker_record->len = 0;
 	start_marker_record->num_frags = 0;
 
-	INIT_WORK(&offload_ctx->destruct_work, tls_device_tx_del_task);
-	offload_ctx->ctx = ctx;
-
 	INIT_LIST_HEAD(&offload_ctx->records_list);
 	list_add_tail(&start_marker_record->list, &offload_ctx->records_list);
 	spin_lock_init(&offload_ctx->lock);
@@ -1349,7 +1362,7 @@ static int tls_device_down(struct net_device *netdev)
 
 	up_write(&device_offload_lock);
 
-	flush_workqueue(destruct_wq);
+	flush_work(&tls_device_gc_work);
 
 	return NOTIFY_DONE;
 }
@@ -1390,36 +1403,12 @@ static struct notifier_block tls_dev_notifier = {
 
 int __init tls_device_init(void)
 {
-	int err;
-
-	dummy_page = alloc_page(GFP_KERNEL);
-	if (!dummy_page)
-		return -ENOMEM;
-
-	destruct_wq = alloc_workqueue("ktls_device_destruct", 0, 0);
-	if (!destruct_wq) {
-		err = -ENOMEM;
-		goto err_free_dummy;
-	}
-
-	err = register_netdevice_notifier(&tls_dev_notifier);
-	if (err)
-		goto err_destroy_wq;
-
-	return 0;
-
-err_destroy_wq:
-	destroy_workqueue(destruct_wq);
-err_free_dummy:
-	put_page(dummy_page);
-	return err;
+	return register_netdevice_notifier(&tls_dev_notifier);
 }
 
 void __exit tls_device_cleanup(void)
 {
 	unregister_netdevice_notifier(&tls_dev_notifier);
-	flush_workqueue(destruct_wq);
-	destroy_workqueue(destruct_wq);
+	flush_work(&tls_device_gc_work);
 	clean_acked_data_flush();
-	put_page(dummy_page);
 }

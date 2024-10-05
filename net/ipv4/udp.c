@@ -443,24 +443,14 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif);
 		if (score > badness) {
-			badness = score;
-			result = lookup_reuseport(net, sk, skb, saddr, sport, daddr, hnum);
-			if (!result) {
-				result = sk;
-				continue;
-			}
-
+			result = lookup_reuseport(net, sk, skb,
+						  saddr, sport, daddr, hnum);
 			/* Fall back to scoring if group has connections */
-			if (!reuseport_has_conns(sk))
+			if (result && !reuseport_has_conns(sk))
 				return result;
 
-			/* Reuseport logic returned an error, keep original score. */
-			if (IS_ERR(result))
-				continue;
-
-			badness = compute_score(result, net, saddr, sport,
-						daddr, hnum, dif, sdif);
-
+			result = result ? : sk;
+			badness = score;
 		}
 	}
 	return result;
@@ -2647,6 +2637,21 @@ int udp_v4_early_demux(struct sk_buff *skb)
 
 int udp_rcv(struct sk_buff *skb)
 {
+	/* UDP RCV start */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	return __udp4_lib_rcv(skb, &udp_table, IPPROTO_UDP);
 }
 
@@ -2711,12 +2716,10 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 		case UDP_ENCAP_ESPINUDP_NON_IKE:
 #if IS_ENABLED(CONFIG_IPV6)
 			if (sk->sk_family == AF_INET6)
-				WRITE_ONCE(up->encap_rcv,
-					   ipv6_stub->xfrm6_udp_encap_rcv);
+				up->encap_rcv = ipv6_stub->xfrm6_udp_encap_rcv;
 			else
 #endif
-				WRITE_ONCE(up->encap_rcv,
-					   xfrm4_udp_encap_rcv);
+				up->encap_rcv = xfrm4_udp_encap_rcv;
 #endif
 			fallthrough;
 		case UDP_ENCAP_L2TPINUDP:

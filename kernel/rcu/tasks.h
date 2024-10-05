@@ -230,6 +230,7 @@ static int __noreturn rcu_tasks_kthread(void *arg)
 		set_tasks_gp_state(rtp, RTGS_INVOKE_CBS);
 		while (list) {
 			next = list->next;
+			debug_rcu_head_callback(list);
 			local_bh_disable();
 			list->func(list);
 			local_bh_enable();
@@ -951,7 +952,7 @@ reset_ipi:
 static bool trc_inspect_reader(struct task_struct *t, void *arg)
 {
 	int cpu = task_cpu(t);
-	int nesting;
+	bool in_qs = false;
 	bool ofl = cpu_is_offline(cpu);
 
 	if (task_curr(t)) {
@@ -971,18 +972,18 @@ static bool trc_inspect_reader(struct task_struct *t, void *arg)
 		n_heavy_reader_updates++;
 		if (ofl)
 			n_heavy_reader_ofl_updates++;
-		nesting = 0;
+		in_qs = true;
 	} else {
 		// The task is not running, so C-language access is safe.
-		nesting = t->trc_reader_nesting;
+		in_qs = likely(!t->trc_reader_nesting);
 	}
 
-	// If not exiting a read-side critical section, mark as checked
-	// so that the grace-period kthread will remove it from the
-	// holdout list.
-	t->trc_reader_checked = nesting >= 0;
-	if (nesting <= 0)
-		return !nesting;  // If in QS, done, otherwise try again later.
+	// Mark as checked so that the grace-period kthread will
+	// remove it from the holdout list.
+	t->trc_reader_checked = true;
+
+	if (in_qs)
+		return true;  // Already in quiescent state, done!!!
 
 	// The task is in a read-side critical section, so set up its
 	// state so that it will awaken the grace-period kthread upon exit
@@ -1041,11 +1042,9 @@ static void trc_wait_for_one_reader(struct task_struct *t,
 		if (smp_call_function_single(cpu, trc_read_check_handler, t, 0)) {
 			// Just in case there is some other reason for
 			// failure than the target CPU being offline.
-			WARN_ONCE(1, "%s():  smp_call_function_single() failed for CPU: %d\n",
-				  __func__, cpu);
 			rcu_tasks_trace.n_ipis_fails++;
 			per_cpu(trc_ipi_to_cpu, cpu) = false;
-			t->trc_ipi_to_cpu = -1;
+			t->trc_ipi_to_cpu = cpu;
 		}
 	}
 }
@@ -1166,27 +1165,13 @@ static void check_all_holdout_tasks_trace(struct list_head *hop,
 	}
 }
 
-static void rcu_tasks_trace_empty_fn(void *unused)
-{
-}
-
 /* Wait for grace period to complete and provide ordering. */
 static void rcu_tasks_trace_postgp(struct rcu_tasks *rtp)
 {
-	int cpu;
 	bool firstreport;
 	struct task_struct *g, *t;
 	LIST_HEAD(holdouts);
 	long ret;
-
-	// Wait for any lingering IPI handlers to complete.  Note that
-	// if a CPU has gone offline or transitioned to userspace in the
-	// meantime, all IPI handlers should have been drained beforehand.
-	// Yes, this assumes that CPUs process IPIs in order.  If that ever
-	// changes, there will need to be a recheck and/or timed wait.
-	for_each_online_cpu(cpu)
-		if (smp_load_acquire(per_cpu_ptr(&trc_ipi_to_cpu, cpu)))
-			smp_call_function_single(cpu, rcu_tasks_trace_empty_fn, NULL, 1);
 
 	// Remove the safety count.
 	smp_mb__before_atomic();  // Order vs. earlier atomics

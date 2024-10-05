@@ -1486,6 +1486,11 @@ static int type_read(struct policydb *p, struct symtab *s, void *fp)
 		goto bad;
 	return 0;
 bad:
+// [ SEC_SELINUX_PORTING_COMMON
+#ifndef CONFIG_ALWAYS_ENFORCE
+	panic("SELinux:Failed to type read");
+#endif /*CONFIG_ALWAYS_ENFORCE*/
+// ] SEC_SELINUX_PORTING_COMMON
 	type_destroy(key, typdatum, NULL);
 	return rc;
 }
@@ -2011,7 +2016,6 @@ static int filename_trans_read_helper(struct policydb *p, void *fp)
 		if (!datum)
 			goto out;
 
-		datum->next = NULL;
 		*dst = datum;
 
 		/* ebitmap_read() will at least init the bitmap */
@@ -2024,6 +2028,7 @@ static int filename_trans_read_helper(struct policydb *p, void *fp)
 			goto out;
 
 		datum->otype = le32_to_cpu(buf[0]);
+		datum->next = NULL;
 
 		dst = &datum->next;
 	}
@@ -2717,6 +2722,11 @@ out:
 bad:
 	kfree(rtk);
 	kfree(rtd);
+	// [ SEC_SELINUX_PORTING_COMMON
+#ifndef CONFIG_ALWAYS_ENFORCE
+	panic("SELinux:Failed to load policy");
+#endif /*CONFIG_ALWAYS_ENFORCE*/
+// ] SEC_SELINUX_PORTING_COMMON
 	policydb_destroy(p);
 	goto out;
 }

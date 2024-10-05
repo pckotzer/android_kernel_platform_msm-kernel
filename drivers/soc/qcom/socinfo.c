@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2009-2017, 2021 The Linux Foundation. All rights reserved.
  * Copyright (c) 2017-2019, Linaro Ltd.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -18,6 +18,7 @@
 #include <linux/stat.h>
 #include <soc/qcom/socinfo.h>
 #include <asm/unaligned.h>
+#include <linux/samsung/debug/sec_debug.h>
 
 /*
  * SoC version type with major number in the upper 16 bits and minor
@@ -110,10 +111,6 @@ static const char *const pmic_models[] = {
 	[32] = "PM8150B",
 	[33] = "PMK8002",
 	[36] = "PM8009",
-	/* Lemansau Main Domain */
-	[78] = "PM8775",
-	/* Lemansau SAIL Domain */
-	[79] = "PM8775",
 };
 #endif /* CONFIG_DEBUG_FS */
 
@@ -375,14 +372,10 @@ struct smem_image_version {
 		int num_parts = 0; \
 		int str_pos = 0, i = 0, ret = 0; \
 		num_parts = socinfo_get_part_count(part_enum); \
-		if (num_parts <= 0) \
-			return -EINVAL;  \
 		part_info = kmalloc_array(num_parts, sizeof(*part_info), GFP_KERNEL); \
 		ret = socinfo_get_subpart_info(part_enum, part_info, num_parts); \
-		if (ret < 0) { \
-			kfree(part_info); \
+		if (ret < 0) \
 			return -EINVAL;  \
-		} \
 		for (i = 0; i < num_parts; i++) { \
 			str_pos += scnprintf(buf+str_pos, PAGE_SIZE-str_pos, "0x%x", \
 					part_info[i]); \
@@ -894,9 +887,8 @@ bool
 socinfo_get_part_info(enum subset_part_type part)
 {
 	uint32_t partinfo;
-	uint32_t num_parts = socinfo_get_num_subset_parts();
 
-	if ((part <= PART_UNKNOWN) || (part >= NUM_PARTS_MAX) || (part >= num_parts)) {
+	if (part >= NUM_PARTS_MAX) {
 		pr_err("Bad part number\n");
 		return false;
 	}
@@ -934,11 +926,10 @@ int
 socinfo_get_part_count(enum subset_part_type part)
 {
 	int part_count = 1;
-	uint32_t num_parts = socinfo_get_num_subset_parts();
 
 	/* TODO: part_count to be read from SMEM after firmware adds support */
 
-	if ((part <= PART_UNKNOWN) || (part >= NUM_PARTS_MAX) || (part >= num_parts)) {
+	if ((part <= PART_UNKNOWN) || (part >= NUM_PARTS_MAX)) {
 		pr_err("Bad part number\n");
 		return -EINVAL;
 	}
@@ -1259,7 +1250,6 @@ static const struct soc_id soc_id[] = {
 	{ 606, "MONACOAU_IVI"},
 	{ 607, "MONACOAU_SRV1L"},
 	{ 608, "CROW" },
-	{ 644, "CROW_LTE" },
 };
 
 static struct qcom_socinfo *qsocinfo;
@@ -1487,6 +1477,33 @@ msm_get_images(struct device *dev,
 	return pos;
 }
 
+static ssize_t
+msm_get_crash(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	int ret = 0;
+	int is_debug_low = 0;
+
+	unsigned int debug_level = sec_debug_level();
+
+	switch (debug_level) {
+		case SEC_DEBUG_LEVEL_LOW:
+			is_debug_low = 1;
+			break;
+		case SEC_DEBUG_LEVEL_MID:
+			is_debug_low = 0;
+			break;
+	}
+
+	if (!is_debug_low) {
+#ifndef CONFIG_SEC_CDSP_NO_CRASH_FOR_ENG
+		BUG_ON(1);
+#endif
+	}
+	return ret;
+}
+
 static struct device_attribute image_version =
 __ATTR(image_version, 0644,
 		msm_get_image_version, msm_set_image_version);
@@ -1505,6 +1522,9 @@ __ATTR(select_image, 0644,
 
 static struct device_attribute images =
 __ATTR(images, 0444, msm_get_images, NULL);
+
+static struct device_attribute crash =
+	__ATTR(crash, 0444, msm_get_crash, NULL);
 
 static umode_t soc_info_attribute(struct kobject *kobj,
 		struct attribute *attr,
@@ -1608,6 +1628,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	msm_custom_socinfo_attrs[i++] = &image_crm_version.attr;
 	msm_custom_socinfo_attrs[i++] = &select_image.attr;
 	msm_custom_socinfo_attrs[i++] = &images.attr;
+	msm_custom_socinfo_attrs[i++] = &crash.attr;
 	msm_custom_socinfo_attrs[i++] = NULL;
 	qcom_socinfo->attr.custom_attr_group = &custom_soc_attr_group;
 }
@@ -1618,6 +1639,9 @@ static void socinfo_print(void)
 	uint32_t f_min = SOCINFO_MINOR(socinfo_format);
 	uint32_t v_maj = SOCINFO_MAJOR(le32_to_cpu(socinfo->ver));
 	uint32_t v_min = SOCINFO_MINOR(le32_to_cpu(socinfo->ver));
+
+	if (IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP))
+		return;
 
 	switch (socinfo_format) {
 	case SOCINFO_VERSION(0, 1):

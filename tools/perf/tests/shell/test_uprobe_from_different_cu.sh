@@ -4,12 +4,6 @@
 
 set -e
 
-# skip if there's no gcc
-if ! [ -x "$(command -v gcc)" ]; then
-        echo "failed: no gcc compiler"
-        exit 2
-fi
-
 temp_dir=$(mktemp -d /tmp/perf-uprobe-different-cu-sh.XXXXXXXXXX)
 
 cleanup()
@@ -17,7 +11,7 @@ cleanup()
 	trap - EXIT TERM INT
 	if [[ "${temp_dir}" =~ ^/tmp/perf-uprobe-different-cu-sh.*$ ]]; then
 		echo "--- Cleaning up ---"
-		perf probe -x ${temp_dir}/testfile -d foo || true
+		perf probe -x ${temp_dir}/testfile -d foo
 		rm -f "${temp_dir}/"*
 		rmdir "${temp_dir}"
 	fi

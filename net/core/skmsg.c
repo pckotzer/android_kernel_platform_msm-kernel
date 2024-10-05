@@ -1120,19 +1120,13 @@ static void sk_psock_strp_data_ready(struct sock *sk)
 
 int sk_psock_init_strp(struct sock *sk, struct sk_psock *psock)
 {
-	int ret;
-
 	static const struct strp_callbacks cb = {
 		.rcv_msg	= sk_psock_strp_read,
 		.read_sock_done	= sk_psock_strp_read_done,
 		.parse_msg	= sk_psock_strp_parse,
 	};
 
-	ret = strp_init(&psock->strp, sk, &cb);
-	if (!ret)
-		sk_psock_set_state(psock, SK_PSOCK_RX_STRP_ENABLED);
-
-	return ret;
+	return strp_init(&psock->strp, sk, &cb);
 }
 
 void sk_psock_start_strp(struct sock *sk, struct sk_psock *psock)
@@ -1160,7 +1154,7 @@ void sk_psock_stop_strp(struct sock *sk, struct sk_psock *psock)
 static void sk_psock_done_strp(struct sk_psock *psock)
 {
 	/* Parser has been stopped */
-	if (sk_psock_test_state(psock, SK_PSOCK_RX_STRP_ENABLED))
+	if (psock->progs.stream_parser)
 		strp_done(&psock->strp);
 }
 #else

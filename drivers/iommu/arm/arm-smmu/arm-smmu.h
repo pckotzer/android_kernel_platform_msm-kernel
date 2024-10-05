@@ -6,7 +6,7 @@
  *
  * Author: Will Deacon <will.deacon@arm.com>
  *
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ARM_SMMU_H
@@ -285,11 +285,7 @@ enum arm_smmu_cbar_type {
 
 /* Implementation Defined Register Space 5 registers*/
 /* Relative to IMPL_DEF5 page */
-#ifdef CONFIG_ARM_SMMU_TESTBUS_DUMP_GEN3AUTO
-#define ARM_SMMU_STATS_SYNC_INV_TBU_ACK 0x51c
-#else
 #define ARM_SMMU_STATS_SYNC_INV_TBU_ACK 0x5dc
-#endif
 #define TBU_SYNC_ACK			GENMASK(31, 17)
 #define TBU_SYNC_REQ			BIT(16)
 #define TBU_INV_ACK			GENMASK(15, 1)
@@ -331,6 +327,11 @@ enum arm_smmu_implementation {
 	QCOM_SMMUV500,
 };
 
+struct arm_smmu_impl_def_reg {
+	u32 offset;
+	u32 value;
+};
+
 /*
  * Describes resources required for on/off power operation.
  * Separate reference count is provided for atomic/nonatomic
@@ -353,6 +354,7 @@ struct arm_smmu_power_resources {
 
 	int (*resume)(struct arm_smmu_power_resources *pwr);
 	void (*suspend)(struct arm_smmu_power_resources *pwr);
+
 };
 
 struct arm_smmu_s2cr {
@@ -542,8 +544,6 @@ struct arm_smmu_domain {
 	enum io_pgtable_fmt		pgtbl_fmt;
 	/* mapping_cfg.atomic indicates that runtime power management should be disabled. */
 	bool				rpm_always_on;
-	/* skip tlb management. */
-	bool skip_tlb_management;
 
 #ifdef CONFIG_ARM_SMMU_CONTEXT_FAULT_RETRY
 	u64				prev_fault_address;
@@ -711,13 +711,7 @@ static inline void arm_smmu_writeq(struct arm_smmu_device *smmu, int page,
  * Implementation defined space starts after SMMU GR space, so IMPL_DEF page n
  * is page n + 2 in the SMMU register space.
  */
-#define ARM_SMMU_IMPL_DEF0	2
-#define ARM_SMMU_IMPL_DEF4	6
-#ifdef CONFIG_ARM_SMMU_TESTBUS_DUMP_GEN3AUTO
-#define ARM_SMMU_IMPL_DEF5	ARM_SMMU_IMPL_DEF0
-#else
 #define ARM_SMMU_IMPL_DEF5	7
-#endif
 
 #define ARM_SMMU_CB(s, n)	((s)->numpage + (n))
 
@@ -744,7 +738,6 @@ struct arm_smmu_device *arm_smmu_impl_init(struct arm_smmu_device *smmu);
 struct arm_smmu_device *nvidia_smmu_impl_init(struct arm_smmu_device *smmu);
 struct arm_smmu_device *qcom_smmu_impl_init(struct arm_smmu_device *smmu);
 struct arm_smmu_device *qsmmuv500_impl_init(struct arm_smmu_device *smmu);
-struct arm_smmu_device *qsmmuv2_impl_init(struct arm_smmu_device *smmu);
 struct arm_smmu_device *qcom_adreno_smmu_impl_init(struct arm_smmu_device *smmu);
 
 void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx);

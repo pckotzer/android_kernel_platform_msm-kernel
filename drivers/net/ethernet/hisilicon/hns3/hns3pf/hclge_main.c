@@ -70,9 +70,6 @@ static void hclge_sync_mac_table(struct hclge_dev *hdev);
 static void hclge_restore_hw_table(struct hclge_dev *hdev);
 static void hclge_sync_promisc_mode(struct hclge_dev *hdev);
 static void hclge_sync_fd_table(struct hclge_dev *hdev);
-static int hclge_mac_link_status_wait(struct hclge_dev *hdev, int link_ret,
-				      int wait_cnt);
-static int hclge_update_port_info(struct hclge_dev *hdev);
 
 static struct hnae3_ae_algo ae_algo;
 
@@ -2951,9 +2948,6 @@ static void hclge_update_link_status(struct hclge_dev *hdev)
 
 	if (state != hdev->hw.mac.link) {
 		hdev->hw.mac.link = state;
-		if (state == HCLGE_LINK_STATUS_UP)
-			hclge_update_port_info(hdev);
-
 		client->ops->link_status_change(handle, state);
 		hclge_config_mac_tnl_int(hdev, state);
 		if (rclient && rclient->ops->link_status_change)
@@ -3395,14 +3389,9 @@ static u32 hclge_check_event_cause(struct hclge_dev *hdev, u32 *clearval)
 static void hclge_clear_event_cause(struct hclge_dev *hdev, u32 event_type,
 				    u32 regclr)
 {
-#define HCLGE_IMP_RESET_DELAY		5
-
 	switch (event_type) {
 	case HCLGE_VECTOR0_EVENT_PTP:
 	case HCLGE_VECTOR0_EVENT_RST:
-		if (regclr == BIT(HCLGE_VECTOR0_IMPRESET_INT_B))
-			mdelay(HCLGE_IMP_RESET_DELAY);
-
 		hclge_write_dev(&hdev->hw, HCLGE_MISC_RESET_STS_REG, regclr);
 		break;
 	case HCLGE_VECTOR0_EVENT_MBX:
@@ -7555,12 +7544,6 @@ static int hclge_del_cls_flower(struct hnae3_handle *handle,
 	ret = hclge_fd_tcam_config(hdev, HCLGE_FD_STAGE_1, true, rule->location,
 				   NULL, false);
 	if (ret) {
-		/* if tcam config fail, set rule state to TO_DEL,
-		 * so the rule will be deleted when periodic
-		 * task being scheduled.
-		 */
-		hclge_update_fd_list(hdev, HCLGE_FD_TO_DEL, rule->location, NULL);
-		set_bit(HCLGE_STATE_FD_TBL_CHANGED, &hdev->state);
 		spin_unlock_bh(&hdev->fd_rule_lock);
 		return ret;
 	}
@@ -7673,8 +7656,6 @@ static void hclge_enable_fd(struct hnae3_handle *handle, bool enable)
 
 static void hclge_cfg_mac_mode(struct hclge_dev *hdev, bool enable)
 {
-#define HCLGE_LINK_STATUS_WAIT_CNT  3
-
 	struct hclge_desc desc;
 	struct hclge_config_mac_mode_cmd *req =
 		(struct hclge_config_mac_mode_cmd *)desc.data;
@@ -7699,15 +7680,9 @@ static void hclge_cfg_mac_mode(struct hclge_dev *hdev, bool enable)
 	req->txrx_pad_fcs_loop_en = cpu_to_le32(loop_en);
 
 	ret = hclge_cmd_send(&hdev->hw, &desc, 1);
-	if (ret) {
+	if (ret)
 		dev_err(&hdev->pdev->dev,
 			"mac enable fail, ret =%d.\n", ret);
-		return;
-	}
-
-	if (!enable)
-		hclge_mac_link_status_wait(hdev, HCLGE_LINK_STATUS_DOWN,
-					   HCLGE_LINK_STATUS_WAIT_CNT);
 }
 
 static int hclge_config_switch_param(struct hclge_dev *hdev, int vfid,
@@ -7770,9 +7745,10 @@ static void hclge_phy_link_status_wait(struct hclge_dev *hdev,
 	} while (++i < HCLGE_PHY_LINK_STATUS_NUM);
 }
 
-static int hclge_mac_link_status_wait(struct hclge_dev *hdev, int link_ret,
-				      int wait_cnt)
+static int hclge_mac_link_status_wait(struct hclge_dev *hdev, int link_ret)
 {
+#define HCLGE_MAC_LINK_STATUS_NUM  100
+
 	int link_status;
 	int i = 0;
 	int ret;
@@ -7785,15 +7761,13 @@ static int hclge_mac_link_status_wait(struct hclge_dev *hdev, int link_ret,
 			return 0;
 
 		msleep(HCLGE_LINK_STATUS_MS);
-	} while (++i < wait_cnt);
+	} while (++i < HCLGE_MAC_LINK_STATUS_NUM);
 	return -EBUSY;
 }
 
 static int hclge_mac_phy_link_status_wait(struct hclge_dev *hdev, bool en,
 					  bool is_phy)
 {
-#define HCLGE_MAC_LINK_STATUS_NUM  100
-
 	int link_ret;
 
 	link_ret = en ? HCLGE_LINK_STATUS_UP : HCLGE_LINK_STATUS_DOWN;
@@ -7801,8 +7775,7 @@ static int hclge_mac_phy_link_status_wait(struct hclge_dev *hdev, bool en,
 	if (is_phy)
 		hclge_phy_link_status_wait(hdev, link_ret);
 
-	return hclge_mac_link_status_wait(hdev, link_ret,
-					  HCLGE_MAC_LINK_STATUS_NUM);
+	return hclge_mac_link_status_wait(hdev, link_ret);
 }
 
 static int hclge_set_app_loopback(struct hclge_dev *hdev, bool en)
@@ -8982,7 +8955,7 @@ static void hclge_update_overflow_flags(struct hclge_vport *vport,
 	if (mac_type == HCLGE_MAC_ADDR_UC) {
 		if (is_all_added)
 			vport->overflow_promisc_flags &= ~HNAE3_OVERFLOW_UPE;
-		else if (hclge_is_umv_space_full(vport, true))
+		else
 			vport->overflow_promisc_flags |= HNAE3_OVERFLOW_UPE;
 	} else {
 		if (is_all_added)
@@ -9444,7 +9417,7 @@ int hclge_update_mac_node_for_dev_addr(struct hclge_vport *vport,
 	return 0;
 }
 
-static int hclge_set_mac_addr(struct hnae3_handle *handle, const void *p,
+static int hclge_set_mac_addr(struct hnae3_handle *handle, void *p,
 			      bool is_first)
 {
 	const unsigned char *new_addr = (const unsigned char *)p;
@@ -10200,6 +10173,8 @@ static void hclge_rm_vport_vlan_table(struct hclge_vport *vport, u16 vlan_id,
 	struct hclge_vport_vlan_cfg *vlan, *tmp;
 	struct hclge_dev *hdev = vport->back;
 
+	mutex_lock(&hdev->vport_lock);
+
 	list_for_each_entry_safe(vlan, tmp, &vport->vlan_list, node) {
 		if (vlan->vlan_id == vlan_id) {
 			if (is_write_tbl && vlan->hd_tbl_status)
@@ -10214,6 +10189,8 @@ static void hclge_rm_vport_vlan_table(struct hclge_vport *vport, u16 vlan_id,
 			break;
 		}
 	}
+
+	mutex_unlock(&hdev->vport_lock);
 }
 
 void hclge_rm_vport_all_vlan_table(struct hclge_vport *vport, bool is_del_list)
@@ -10618,16 +10595,11 @@ int hclge_set_vlan_filter(struct hnae3_handle *handle, __be16 proto,
 	 * handle mailbox. Just record the vlan id, and remove it after
 	 * reset finished.
 	 */
-	mutex_lock(&hdev->vport_lock);
 	if ((test_bit(HCLGE_STATE_RST_HANDLING, &hdev->state) ||
 	     test_bit(HCLGE_STATE_RST_FAIL, &hdev->state)) && is_kill) {
 		set_bit(vlan_id, vport->vlan_del_fail_bmap);
-		mutex_unlock(&hdev->vport_lock);
 		return -EBUSY;
-	} else if (!is_kill && test_bit(vlan_id, vport->vlan_del_fail_bmap)) {
-		clear_bit(vlan_id, vport->vlan_del_fail_bmap);
 	}
-	mutex_unlock(&hdev->vport_lock);
 
 	/* when port base vlan enabled, we use port base vlan as the vlan
 	 * filter entry. In this case, we don't update vlan filter table
@@ -10642,22 +10614,17 @@ int hclge_set_vlan_filter(struct hnae3_handle *handle, __be16 proto,
 	}
 
 	if (!ret) {
-		if (!is_kill) {
+		if (!is_kill)
 			hclge_add_vport_vlan_table(vport, vlan_id,
 						   writen_to_tbl);
-		} else if (is_kill && vlan_id != 0) {
-			mutex_lock(&hdev->vport_lock);
+		else if (is_kill && vlan_id != 0)
 			hclge_rm_vport_vlan_table(vport, vlan_id, false);
-			mutex_unlock(&hdev->vport_lock);
-		}
 	} else if (is_kill) {
 		/* when remove hw vlan filter failed, record the vlan id,
 		 * and try to remove it from hw later, to be consistence
 		 * with stack
 		 */
-		mutex_lock(&hdev->vport_lock);
 		set_bit(vlan_id, vport->vlan_del_fail_bmap);
-		mutex_unlock(&hdev->vport_lock);
 	}
 
 	hclge_set_vport_vlan_fltr_change(vport);
@@ -10697,7 +10664,6 @@ static void hclge_sync_vlan_filter(struct hclge_dev *hdev)
 	int i, ret, sync_cnt = 0;
 	u16 vlan_id;
 
-	mutex_lock(&hdev->vport_lock);
 	/* start from vport 1 for PF is always alive */
 	for (i = 0; i < hdev->num_alloc_vport; i++) {
 		struct hclge_vport *vport = &hdev->vport[i];
@@ -10708,26 +10674,21 @@ static void hclge_sync_vlan_filter(struct hclge_dev *hdev)
 			ret = hclge_set_vlan_filter_hw(hdev, htons(ETH_P_8021Q),
 						       vport->vport_id, vlan_id,
 						       true);
-			if (ret && ret != -EINVAL) {
-				mutex_unlock(&hdev->vport_lock);
+			if (ret && ret != -EINVAL)
 				return;
-			}
 
 			clear_bit(vlan_id, vport->vlan_del_fail_bmap);
 			hclge_rm_vport_vlan_table(vport, vlan_id, false);
 			hclge_set_vport_vlan_fltr_change(vport);
 
 			sync_cnt++;
-			if (sync_cnt >= HCLGE_MAX_SYNC_COUNT) {
-				mutex_unlock(&hdev->vport_lock);
+			if (sync_cnt >= HCLGE_MAX_SYNC_COUNT)
 				return;
-			}
 
 			vlan_id = find_first_bit(vport->vlan_del_fail_bmap,
 						 VLAN_N_VID);
 		}
 	}
-	mutex_unlock(&hdev->vport_lock);
 
 	hclge_sync_vlan_fltr_state(hdev);
 }
@@ -11020,11 +10981,8 @@ int hclge_cfg_flowctrl(struct hclge_dev *hdev)
 	u32 rx_pause, tx_pause;
 	u8 flowctl;
 
-	if (!phydev->link)
+	if (!phydev->link || !phydev->autoneg)
 		return 0;
-
-	if (!phydev->autoneg)
-		return hclge_mac_pause_setup_hw(hdev);
 
 	local_advertising = linkmode_adv_to_lcl_adv_t(phydev->advertising);
 
@@ -11214,7 +11172,6 @@ static void hclge_get_mdix_mode(struct hnae3_handle *handle,
 
 static void hclge_info_show(struct hclge_dev *hdev)
 {
-	struct hnae3_handle *handle = &hdev->vport->nic;
 	struct device *dev = &hdev->pdev->dev;
 
 	dev_info(dev, "PF info begin:\n");
@@ -11231,9 +11188,9 @@ static void hclge_info_show(struct hclge_dev *hdev)
 	dev_info(dev, "This is %s PF\n",
 		 hdev->flag & HCLGE_FLAG_MAIN ? "main" : "not main");
 	dev_info(dev, "DCB %s\n",
-		 handle->kinfo.tc_info.dcb_ets_active ? "enable" : "disable");
+		 hdev->flag & HCLGE_FLAG_DCB_ENABLE ? "enable" : "disable");
 	dev_info(dev, "MQPRIO %s\n",
-		 handle->kinfo.tc_info.mqprio_active ? "enable" : "disable");
+		 hdev->flag & HCLGE_FLAG_MQPRIO_ENABLE ? "enable" : "disable");
 	dev_info(dev, "Default tx spare buffer size: %u\n",
 		 hdev->tx_spare_buf_size);
 
@@ -11717,7 +11674,6 @@ static int hclge_init_ae_dev(struct hnae3_ae_dev *ae_dev)
 		goto err_msi_irq_uninit;
 
 	if (hdev->hw.mac.media_type == HNAE3_MEDIA_TYPE_COPPER) {
-		clear_bit(HNAE3_DEV_SUPPORT_FEC_B, ae_dev->caps);
 		if (hnae3_dev_phy_imp_supported(hdev))
 			ret = hclge_update_tp_port_info(hdev);
 		else

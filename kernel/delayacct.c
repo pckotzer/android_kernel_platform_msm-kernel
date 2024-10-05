@@ -14,8 +14,6 @@
 #include <linux/delayacct.h>
 #include <linux/module.h>
 
-#ifdef CONFIG_TASK_DELAY_ACCT
-
 DEFINE_STATIC_KEY_FALSE(delayacct_key);
 int delayacct_on __read_mostly;	/* Delay accounting turned on/off */
 struct kmem_cache *delayacct_cache;
@@ -187,6 +185,19 @@ __u64 __delayacct_blkio_ticks(struct task_struct *tsk)
 	return ret;
 }
 
+#ifdef CONFIG_PAGE_BOOST
+__u64 __delayacct_blkio_nsecs(struct task_struct *tsk)
+{
+	__u64 ret;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&tsk->delays->lock, flags);
+	ret = tsk->delays->blkio_delay + tsk->delays->swapin_delay;
+	raw_spin_unlock_irqrestore(&tsk->delays->lock, flags);
+	return ret;
+}
+#endif
+
 void __delayacct_freepages_start(void)
 {
 	current->delays->freepages_start = local_clock();
@@ -212,91 +223,3 @@ void __delayacct_thrashing_end(void)
 		      &current->delays->thrashing_delay,
 		      &current->delays->thrashing_count);
 }
-#else
-#include <trace/hooks/delayacct.h>
-
-int delayacct_enabled __read_mostly;	/* Delay accounting turned on/off */
-bool get_delayacct_enabled(void)
-{
-	return delayacct_enabled;
-}
-
-void set_delayacct_enabled(bool enabled)
-{
-	delayacct_enabled = enabled;
-}
-EXPORT_SYMBOL_GPL(set_delayacct_enabled);
-
-void _trace_android_vh_delayacct_set_flag(struct task_struct *p, int flag)
-{
-	trace_android_vh_delayacct_set_flag(p, flag);
-}
-
-void _trace_android_vh_delayacct_clear_flag(struct task_struct *p, int flag)
-{
-	trace_android_vh_delayacct_clear_flag(p, flag);
-}
-
-void _trace_android_rvh_delayacct_init(void)
-{
-	trace_android_rvh_delayacct_init(NULL);
-}
-
-void _trace_android_rvh_delayacct_tsk_init(struct task_struct *tsk)
-{
-	trace_android_rvh_delayacct_tsk_init(tsk);
-}
-
-void _trace_android_rvh_delayacct_tsk_free(struct task_struct *tsk)
-{
-	trace_android_rvh_delayacct_tsk_free(tsk);
-}
-
-void _trace_android_vh_delayacct_blkio_start(void)
-{
-	trace_android_vh_delayacct_blkio_start(NULL);
-}
-
-void _trace_android_vh_delayacct_blkio_end(struct task_struct *p)
-{
-	trace_android_vh_delayacct_blkio_end(p);
-}
-
-
-void _trace_android_vh_delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk, int *ret)
-{
-	trace_android_vh_delayacct_add_tsk(d, tsk, ret);
-}
-
-void _trace_android_vh_delayacct_blkio_ticks(struct task_struct *tsk, __u64 *ret)
-{
-	trace_android_vh_delayacct_blkio_ticks(tsk, ret);
-}
-
-void _trace_android_vh_delayacct_is_task_waiting_on_io(struct task_struct *p, int *ret)
-{
-	trace_android_vh_delayacct_is_task_waiting_on_io(p, ret);
-}
-
-void _trace_android_vh_delayacct_freepages_start(void)
-{
-	trace_android_vh_delayacct_freepages_start(NULL);
-}
-
-void _trace_android_vh_delayacct_freepages_end(void)
-{
-	trace_android_vh_delayacct_freepages_end(NULL);
-}
-
-void _trace_android_vh_delayacct_thrashing_start(void)
-{
-	trace_android_vh_delayacct_thrashing_start(NULL);
-}
-
-void _trace_android_vh_delayacct_thrashing_end(void)
-{
-	trace_android_vh_delayacct_thrashing_end(NULL);
-}
-
-#endif
-

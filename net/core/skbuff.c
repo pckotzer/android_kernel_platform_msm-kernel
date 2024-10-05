@@ -1073,6 +1073,53 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->scm_io_uring = old->scm_io_uring;
 }
 
+char __skb_clone_log1[1000][512];
+int __skb_clone_log1_iter = 0;
+
+void __skb_clone_log(struct sk_buff *n, struct sk_buff *skb)
+{
+	struct timespec64 ts;
+
+	ktime_get_ts64(&ts);
+	snprintf(__skb_clone_log1[__skb_clone_log1_iter], 512,
+		"%s():%d %lld.%ld n %llx skb %llx\n",
+		__func__, __LINE__, ts.tv_sec, ts.tv_nsec, (u64)n, (u64)skb);
+	__skb_clone_log1_iter++;
+	if (__skb_clone_log1_iter > 999)
+		__skb_clone_log1_iter = 0;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (n->dev && !strstr(n->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(n, frag_iter) {
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)n);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+}
 /*
  * You should not add any new code to this function.  Add it to
  * __copy_skb_header above instead.
@@ -1106,6 +1153,7 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	atomic_inc(&(skb_shinfo(skb)->dataref));
 	skb->cloned = 1;
 
+	__skb_clone_log(n, skb);
 	return n;
 #undef C
 }
@@ -4025,20 +4073,21 @@ struct sk_buff *skb_segment(struct sk_buff *head_skb,
 	struct sk_buff *segs = NULL;
 	struct sk_buff *tail = NULL;
 	struct sk_buff *list_skb = skb_shinfo(head_skb)->frag_list;
+	skb_frag_t *frag = skb_shinfo(head_skb)->frags;
 	unsigned int mss = skb_shinfo(head_skb)->gso_size;
 	unsigned int doffset = head_skb->data - skb_mac_header(head_skb);
+	struct sk_buff *frag_skb = head_skb;
 	unsigned int offset = doffset;
 	unsigned int tnl_hlen = skb_tnl_header_len(head_skb);
 	unsigned int partial_segs = 0;
 	unsigned int headroom;
 	unsigned int len = head_skb->len;
-	struct sk_buff *frag_skb;
-	skb_frag_t *frag;
 	__be16 proto;
 	bool csum, sg;
+	int nfrags = skb_shinfo(head_skb)->nr_frags;
 	int err = -ENOMEM;
 	int i = 0;
-	int nfrags, pos;
+	int pos;
 
 	if ((skb_shinfo(head_skb)->gso_type & SKB_GSO_DODGY) &&
 	    mss != GSO_BY_FRAGS && mss != skb_headlen(head_skb)) {
@@ -4115,13 +4164,6 @@ normal:
 	headroom = skb_headroom(head_skb);
 	pos = skb_headlen(head_skb);
 
-	if (skb_orphan_frags(head_skb, GFP_ATOMIC))
-		return ERR_PTR(-ENOMEM);
-
-	nfrags = skb_shinfo(head_skb)->nr_frags;
-	frag = skb_shinfo(head_skb)->frags;
-	frag_skb = head_skb;
-
 	do {
 		struct sk_buff *nskb;
 		skb_frag_t *nskb_frag;
@@ -4142,10 +4184,6 @@ normal:
 		    (skb_headlen(list_skb) == len || sg)) {
 			BUG_ON(skb_headlen(list_skb) > len);
 
-			nskb = skb_clone(list_skb, GFP_ATOMIC);
-			if (unlikely(!nskb))
-				goto err;
-
 			i = 0;
 			nfrags = skb_shinfo(list_skb)->nr_frags;
 			frag = skb_shinfo(list_skb)->frags;
@@ -4164,7 +4202,11 @@ normal:
 				frag++;
 			}
 
+			nskb = skb_clone(list_skb, GFP_ATOMIC);
 			list_skb = list_skb->next;
+
+			if (unlikely(!nskb))
+				goto err;
 
 			if (unlikely(pskb_trim(nskb, len))) {
 				kfree_skb(nskb);
@@ -4241,16 +4283,12 @@ normal:
 		skb_shinfo(nskb)->flags |= skb_shinfo(head_skb)->flags &
 					   SKBFL_SHARED_FRAG;
 
-		if (skb_zerocopy_clone(nskb, frag_skb, GFP_ATOMIC))
+		if (skb_orphan_frags(frag_skb, GFP_ATOMIC) ||
+		    skb_zerocopy_clone(nskb, frag_skb, GFP_ATOMIC))
 			goto err;
 
 		while (pos < offset + len) {
 			if (i >= nfrags) {
-				if (skb_orphan_frags(list_skb, GFP_ATOMIC) ||
-				    skb_zerocopy_clone(nskb, list_skb,
-						       GFP_ATOMIC))
-					goto err;
-
 				i = 0;
 				nfrags = skb_shinfo(list_skb)->nr_frags;
 				frag = skb_shinfo(list_skb)->frags;
@@ -4264,6 +4302,10 @@ normal:
 					i--;
 					frag--;
 				}
+				if (skb_orphan_frags(frag_skb, GFP_ATOMIC) ||
+				    skb_zerocopy_clone(nskb, frag_skb,
+						       GFP_ATOMIC))
+					goto err;
 
 				list_skb = list_skb->next;
 			}

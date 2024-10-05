@@ -122,7 +122,7 @@ struct ima_kexec_hdr {
 extern const int read_idmap[];
 
 #ifdef CONFIG_HAVE_IMA_KEXEC
-void __init ima_load_kexec_buffer(void);
+void ima_load_kexec_buffer(void);
 #else
 static inline void ima_load_kexec_buffer(void) {}
 #endif /* CONFIG_HAVE_IMA_KEXEC */

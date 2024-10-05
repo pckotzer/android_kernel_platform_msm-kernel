@@ -60,7 +60,6 @@ struct symbol {
 	u8 return_thunk      : 1;
 	u8 fentry            : 1;
 	u8 kcov              : 1;
-	u8 embedded_insn     : 1;
 };
 
 struct reloc {

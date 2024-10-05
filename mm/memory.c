@@ -57,7 +57,6 @@
 #include <linux/delayacct.h>
 #include <linux/init.h>
 #include <linux/pfn_t.h>
-#include <linux/pgsize_migration.h>
 #include <linux/writeback.h>
 #include <linux/memcontrol.h>
 #include <linux/mmu_notifier.h>
@@ -84,6 +83,10 @@
 #include <linux/uaccess.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
+
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+#include <linux/io_record.h>
+#endif
 
 #include "pgalloc-track.h"
 #include "internal.h"
@@ -3638,8 +3641,8 @@ EXPORT_SYMBOL_GPL(unmap_mapping_pages);
 void unmap_mapping_range(struct address_space *mapping,
 		loff_t const holebegin, loff_t const holelen, int even_cows)
 {
-	pgoff_t hba = (pgoff_t)(holebegin) >> PAGE_SHIFT;
-	pgoff_t hlen = ((pgoff_t)(holelen) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	pgoff_t hba = holebegin >> PAGE_SHIFT;
+	pgoff_t hlen = (holelen + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
 	/* Check for overflow. */
 	if (sizeof(holelen) > sizeof(hlen)) {
@@ -3716,31 +3719,16 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	void *shadow = NULL;
 
 	if (vmf->flags & FAULT_FLAG_SPECULATIVE) {
-		bool allow_swap_spf = false;
-
-		/* ksm_might_need_to_copy() needs a stable VMA, spf can't be used */
-#ifndef CONFIG_KSM
-		trace_android_vh_do_swap_page_spf(&allow_swap_spf);
-#endif
-		if (!allow_swap_spf) {
-			pte_unmap(vmf->pte);
-			count_vm_spf_event(SPF_ABORT_SWAP);
-			return VM_FAULT_RETRY;
-		}
+		pte_unmap(vmf->pte);
+		count_vm_spf_event(SPF_ABORT_SWAP);
+		return VM_FAULT_RETRY;
 	}
 
-	if (!pte_unmap_same(vma->vm_mm, vmf->pmd, vmf->pte, vmf->orig_pte)) {
-		if (vmf->flags & FAULT_FLAG_SPECULATIVE)
-			ret = VM_FAULT_RETRY;
+	if (!pte_unmap_same(vma->vm_mm, vmf->pmd, vmf->pte, vmf->orig_pte))
 		goto out;
-	}
 
 	entry = pte_to_swp_entry(vmf->orig_pte);
 	if (unlikely(non_swap_entry(entry))) {
-		if (vmf->flags & FAULT_FLAG_SPECULATIVE) {
-			ret = VM_FAULT_RETRY;
-			goto out;
-		}
 		if (is_migration_entry(entry)) {
 			migration_entry_wait(vma->vm_mm, vmf->pmd,
 					     vmf->address);
@@ -3798,17 +3786,6 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 				swap_readpage(page, true);
 				set_page_private(page, 0);
 			}
-		} else if (vmf->flags & FAULT_FLAG_SPECULATIVE) {
-			/*
-			 * Don't try readahead during a speculative page fault
-			 * as the VMA's boundaries may change in our back.
-			 * If the page is not in the swap cache and synchronous
-			 * read is disabled, fall back to the regular page fault
-			 * mechanism.
-			 */
-			delayacct_clear_flag(current, DELAYACCT_PF_SWAPIN);
-			ret = VM_FAULT_RETRY;
-			goto out;
 		} else {
 			page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE | __GFP_CMA,
 						vmf);
@@ -4375,7 +4352,7 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 }
 
 static unsigned long fault_around_bytes __read_mostly =
-	rounddown_pow_of_two(65536);
+	rounddown_pow_of_two(CONFIG_FAULT_AROUND_BYTES);
 
 #ifdef CONFIG_DEBUG_FS
 static int fault_around_bytes_get(void *data, u64 *val)
@@ -4456,7 +4433,7 @@ static vm_fault_t do_fault_around(struct vm_fault *vmf)
 	end_pgoff = start_pgoff -
 		((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1)) +
 		PTRS_PER_PTE - 1;
-	end_pgoff = min3(end_pgoff, vma_data_pages(vmf->vma) + vmf->vma->vm_pgoff - 1,
+	end_pgoff = min3(end_pgoff, vma_pages(vmf->vma) + vmf->vma->vm_pgoff - 1,
 			start_pgoff + nr_pages - 1);
 
 	if (!(vmf->flags & FAULT_FLAG_SPECULATIVE) &&
@@ -4492,8 +4469,6 @@ static vm_fault_t do_read_fault(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	vm_fault_t ret = 0;
 
-	trace_android_vh_tune_fault_around_bytes(&fault_around_bytes);
-
 	/*
 	 * Let's call ->map_pages() first and use ->fault() as fallback
 	 * if page by the offset is not ready to be mapped (cold cache or
@@ -4505,6 +4480,10 @@ static vm_fault_t do_read_fault(struct vm_fault *vmf)
 			if (ret)
 				return ret;
 		}
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	} else if (vma->vm_ops->map_pages && fault_around_bytes >> PAGE_SHIFT == 1) {
+		record_io_info(vma->vm_file, vmf->pgoff, 1);
+#endif
 	}
 
 	ret = __do_fault(vmf);
@@ -4936,17 +4915,6 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 		pgd_t pgdval;
 		p4d_t p4dval;
 		pud_t pudval;
-		bool uffd_missing_sigbus = false;
-
-#ifdef CONFIG_USERFAULTFD
-		/*
-		 * Only support SPF for SIGBUS+MISSING userfaults in private
-		 * anonymous VMAs.
-		 */
-		uffd_missing_sigbus = vma_is_anonymous(vma) &&
-					(vma->vm_flags & VM_UFFD_MISSING) &&
-					userfaultfd_using_sigbus(vma);
-#endif
 
 		vmf.seq = seq;
 
@@ -5026,19 +4994,11 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 
 		speculative_page_walk_end();
 
-		if (!vmf.pte && uffd_missing_sigbus)
-			return VM_FAULT_SIGBUS;
-
 		return handle_pte_fault(&vmf);
 
 	spf_fail:
 		speculative_page_walk_end();
-		/*
-		 * Failing page-table walk is similar to page-missing so give an
-		 * opportunity to SIGBUS+MISSING userfault to handle it before
-		 * retrying with mmap_lock
-		 */
-		return uffd_missing_sigbus ? VM_FAULT_SIGBUS : VM_FAULT_RETRY;
+		return VM_FAULT_RETRY;
 	}
 #endif	/* CONFIG_SPECULATIVE_PAGE_FAULT */
 

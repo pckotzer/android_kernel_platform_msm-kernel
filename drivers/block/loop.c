@@ -1317,7 +1317,7 @@ static int loop_configure(struct loop_device *lo, fmode_t mode,
 		lo->lo_flags |= LO_FLAGS_PARTSCAN;
 	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
 	if (partscan)
-		lo->lo_disk->flags &= ~GENHD_FL_NO_PART;
+		lo->lo_disk->flags &= ~GENHD_FL_NO_PART_SCAN;
 
 	/* enable and uncork uevent now that we are done */
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
@@ -1466,7 +1466,7 @@ out_unlock:
 	mutex_lock(&lo->lo_mutex);
 	lo->lo_flags = 0;
 	if (!part_shift)
-		lo->lo_disk->flags |= GENHD_FL_NO_PART;
+		lo->lo_disk->flags |= GENHD_FL_NO_PART_SCAN;
 	lo->lo_state = Lo_unbound;
 	mutex_unlock(&lo->lo_mutex);
 
@@ -1583,7 +1583,7 @@ out_unfreeze:
 
 	if (!err && (lo->lo_flags & LO_FLAGS_PARTSCAN) &&
 	     !(prev_lo_flags & LO_FLAGS_PARTSCAN)) {
-		lo->lo_disk->flags &= ~GENHD_FL_NO_PART;
+		lo->lo_disk->flags &= ~GENHD_FL_NO_PART_SCAN;
 		partscan = true;
 	}
 out_unlock:
@@ -2127,7 +2127,6 @@ module_param(max_part, int, 0444);
 MODULE_PARM_DESC(max_part, "Maximum number of partitions per loop device");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(LOOP_MAJOR);
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 
 int loop_register_transfer(struct loop_func_table *funcs)
 {
@@ -2217,6 +2216,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	int ret = 0;
 	struct mem_cgroup *old_memcg = NULL;
 	const bool use_aio = cmd->use_aio;
+	struct cgroup_subsys_state *old_memcg_css, *new_memcg_css;
 
 	if (write && (lo->lo_flags & LO_FLAGS_READ_ONLY)) {
 		ret = -EIO;
@@ -2240,8 +2240,13 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	if (cmd_blkcg_css)
 		kthread_associate_blkcg(NULL);
 
-	if (cmd_memcg_css) {
+	old_memcg_css = cmd_memcg_css;
+	if (old_memcg_css) {
 		set_active_memcg(old_memcg);
+		new_memcg_css = cmd_memcg_css;
+		if (!new_memcg_css || (new_memcg_css != old_memcg_css)) {
+			pr_err("[%s] %px %px", __func__, new_memcg_css, old_memcg_css);
+		}
 		css_put(cmd_memcg_css);
 	}
  failed:
@@ -2414,7 +2419,7 @@ static int loop_add(int i)
 	 * userspace tools. Parameters like this in general should be avoided.
 	 */
 	if (!part_shift)
-		disk->flags |= GENHD_FL_NO_PART;
+		disk->flags |= GENHD_FL_NO_PART_SCAN;
 	disk->flags |= GENHD_FL_EXT_DEVT;
 	atomic_set(&lo->lo_refcnt, 0);
 	mutex_init(&lo->lo_mutex);

@@ -190,23 +190,14 @@ static struct sock *udp6_lib_lookup2(struct net *net,
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif);
 		if (score > badness) {
-			badness = score;
-			result = lookup_reuseport(net, sk, skb, saddr, sport, daddr, hnum);
-			if (!result) {
-				result = sk;
-				continue;
-			}
-
+			result = lookup_reuseport(net, sk, skb,
+						  saddr, sport, daddr, hnum);
 			/* Fall back to scoring if group has connections */
-			if (!reuseport_has_conns(sk))
+			if (result && !reuseport_has_conns(sk))
 				return result;
 
-			/* Reuseport logic returned an error, keep original score. */
-			if (IS_ERR(result))
-				continue;
-
-			badness = compute_score(sk, net, saddr, sport,
-						daddr, hnum, dif, sdif);
+			result = result ? : sk;
+			badness = score;
 		}
 	}
 	return result;
@@ -936,7 +927,6 @@ static int udp6_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb,
 int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		   int proto)
 {
-	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	const struct in6_addr *saddr, *daddr;
 	struct net *net = dev_net(skb->dev);
 	struct udphdr *uh;
@@ -1013,8 +1003,6 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		return udp6_unicast_rcv_skb(sk, skb, uh);
 	}
 
-	reason = SKB_DROP_REASON_NO_SOCKET;
-
 	if (!uh->check)
 		goto report_csum_error;
 
@@ -1027,12 +1015,10 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	__UDP6_INC_STATS(net, UDP_MIB_NOPORTS, proto == IPPROTO_UDPLITE);
 	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_PORT_UNREACH, 0);
 
-	kfree_skb_reason(skb, reason);
+	kfree_skb(skb);
 	return 0;
 
 short_packet:
-	if (reason == SKB_DROP_REASON_NOT_SPECIFIED)
-		reason = SKB_DROP_REASON_PKT_TOO_SMALL;
 	net_dbg_ratelimited("UDP%sv6: short packet: From [%pI6c]:%u %d/%d to [%pI6c]:%u\n",
 			    proto == IPPROTO_UDPLITE ? "-Lite" : "",
 			    saddr, ntohs(uh->source),
@@ -1043,12 +1029,10 @@ short_packet:
 report_csum_error:
 	udp6_csum_zero_error(skb);
 csum_error:
-	if (reason == SKB_DROP_REASON_NOT_SPECIFIED)
-		reason = SKB_DROP_REASON_UDP_CSUM;
 	__UDP6_INC_STATS(net, UDP_MIB_CSUMERRORS, proto == IPPROTO_UDPLITE);
 discard:
 	__UDP6_INC_STATS(net, UDP_MIB_INERRORS, proto == IPPROTO_UDPLITE);
-	kfree_skb_reason(skb, reason);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -1118,6 +1102,21 @@ void udp_v6_early_demux(struct sk_buff *skb)
 
 INDIRECT_CALLABLE_SCOPE int udpv6_rcv(struct sk_buff *skb)
 {
+	/* UDP RCV start */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	return __udp6_lib_rcv(skb, &udp_table, IPPROTO_UDP);
 }
 
